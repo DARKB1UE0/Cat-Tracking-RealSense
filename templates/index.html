@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猫咪追踪系统 - Cat Tracking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐱 猫咪追踪系统</h1>
+            <p class="subtitle">使用YOLOv8 + ResNet50 + RealSense相机追踪特定的猫</p>
+        </header>
+
+        <main>
+            <!-- 状态指示器 -->
+            <div id="status-indicator" class="status-box">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">就绪</span>
+            </div>
+
+            <!-- 视频流显示区域 -->
+            <div class="video-section">
+                <h2>📹 实时视频流</h2>
+                <div class="video-container">
+                    <img id="video-stream" src="/video_feed" alt="Camera Stream">
+                    <div class="video-overlay" id="video-overlay">
+                        <div class="overlay-content">
+                            <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            <p>RealSense相机视频流</p>
+                            <button id="start-camera-btn" class="btn btn-secondary">启动相机</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 上传区域 -->
+            <div class="upload-section">
+                <h2>1. 上传参考猫照片</h2>
+                <p class="instruction">请上传一张清晰的猫照片作为追踪目标</p>
+                
+                <div class="upload-area" id="upload-area">
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
+                    <div class="upload-placeholder" id="upload-placeholder">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p>点击选择或拖拽图片到这里</p>
+                        <p class="file-types">支持 JPG, PNG, GIF, BMP 格式</p>
+                    </div>
+                    <div id="preview-container" class="preview-container" style="display: none;">
+                        <img id="preview-image" src="" alt="预览">
+                        <button id="remove-image" class="remove-btn">✕</button>
+                    </div>
+                </div>
+
+                <button id="upload-btn" class="btn btn-primary" disabled>
+                    上传照片
+                </button>
+            </div>
+
+            <!-- 控制区域 -->
+            <div class="control-section">
+                <h2>2. 启动追踪</h2>
+                <p class="instruction">上传照片并启动相机后点击下方按钮开始追踪</p>
+                
+                <div class="button-group">
+                    <button id="start-btn" class="btn btn-success" disabled>
+                        🚀 启动追踪
+                    </button>
+                    <button id="stop-btn" class="btn btn-danger" disabled>
+                        ⏹ 停止追踪
+                    </button>
+                </div>
+            </div>
+
+            <!-- 信息提示 -->
+            <div class="info-section">
+                <h3>使用说明</h3>
+                <ul>
+                    <li>确保RealSense相机已连接</li>
+                    <li>点击"启动相机"查看实时视频流</li>
+                    <li>上传一张清晰的目标猫照片</li>
+                    <li>点击"启动追踪"开始识别</li>
+                    <li>在视频流中查看实时追踪结果</li>
+                </ul>
+                
+                <h3>技术特性</h3>
+                <ul>
+                    <li>✅ YOLOv8 实时猫检测</li>
+                    <li>✅ ResNet50 深度特征提取</li>
+                    <li>✅ 余弦相似度精确匹配</li>
+                    <li>✅ RealSense 深度测距</li>
+                </ul>
+            </div>
+        </main>
+
+        <footer>
+            <p>Cat Tracking System © 2026</p>
+        </footer>
+    </div>
+
+    <!-- 消息提示 -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
