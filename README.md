@@ -1,201 +1,117 @@
-# 特定猫咪追踪与距离测量系统
+# 🐱 猫咪追踪与导航控制系统 (Cat Tracking & Nav System)
 
-基于 YOLOv8 + ResNet50 深度学习特征匹配的智能猫咪识别与追踪系统。
-
-## 🎯 功能特点
-
-- ✅ **YOLOv8 目标检测** - 使用最新的 YOLOv8 模型进行猫咪检测
-- ✅ **ResNet50 深度特征提取** - 提取 2048 维深度特征向量进行精确匹配
-- ✅ **余弦相似度匹配** - 在深度特征空间进行精确比对，区分不同的猫
-- ✅ **实时距离测量** - 使用 Intel RealSense 深度相机测量目标猫咪的实时距离
-- ✅ **多猫区分** - 可以在多只猫中识别并追踪特定的一只
-- ✅ **可视化标注** - 绿色框标注目标猫，灰色框显示其他猫
-
-## 📋 系统要求
-
-### 硬件要求
-- Intel RealSense 深度相机（D400 系列，如 D435）
-- CPU: 支持 AVX 指令集的现代处理器
-- 内存: 至少 4GB RAM
-
-### 软件要求
-- Ubuntu 20.04/22.04 或其他 Linux 发行版
-- Python 3.8 - 3.11
-- Intel RealSense SDK
-
-## 🚀 安装步骤
-
-### 1. 安装系统依赖
-
-```bash
-# 安装 RealSense SDK
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE
-sudo add-apt-repository "deb https://librealsense.intel.com/Debian/apt-repo $(lsb_release -cs) main"
-sudo apt update
-sudo apt install librealsense2-devel librealsense2-utils
-```
-
-### 2. 安装 Python 依赖
-
-```bash
-# 进入项目目录
-cd Yolo-Object-Detection-and-Distance-Measurement-With-Intel-Realsense-Camera
-
-# 安装 PyTorch CPU 版本（适合 AMD 显卡或无独显的系统）
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu --user
-
-# 安装其他依赖
-pip install ultralytics scipy pyrealsense2 opencv-python numpy pillow --user
-```
-
-## 📖 使用方法
-
-### 1. 准备参考图片
-
-准备一张你想追踪的猫的清晰照片，放在项目目录下。
-
-```bash
-# 例如：my_cat.jpg
-```
-
-### 2. 运行追踪程序
-
-```bash
-python3 track_specific_cat.py my_cat.jpg
-```
-
-### 3. 操作说明
-
-- **'q' 键** - 退出程序
-- **'s' 键** - 保存当前帧到文件
-
-## ⚙️ 工作原理
-
-### 1. YOLOv8 猫咪检测
-- 使用 YOLOv8n（nano版本）实时检测视频流中的所有猫
-- 检测置信度阈值：0.5
-- 处理速度：15-20 FPS（CPU模式）
-
-### 2. ResNet50 特征提取
-- 从参考图片中提取 2048 维深度特征向量
-- 对每只检测到的猫提取特征向量
-- 特征归一化确保尺度一致性
-
-### 3. 余弦相似度匹配
-- 计算检测到的猫与参考猫的余弦相似度
-- 相似度范围：0-1（1表示完全相同，0表示完全不同）
-- **默认阈值：0.75** - 只有相似度 ≥ 0.75 才认为是目标猫
-- **差距要求：0.05** - 目标猫必须比第二名高出至少 0.05
-
-### 4. 距离测量
-- 使用 RealSense 深度传感器获取深度信息
-- 计算猫咪中心点的实时距离（米）
-- 显示在画面标注上
-
-## 🎨 显示说明
-
-### 目标猫（绿色粗框）
-```
-TARGET Distance: 1.23m
-Similarity: 0.856
-```
-
-### 其他猫（灰色细框）
-```
-Other cat (0.623)
-```
-
-### 底部信息
-```
-Max similarity: 0.856  # 当前帧最高相似度
-```
-
-## 🔧 参数调整
-
-### 修改相似度阈值
-
-编辑 `track_specific_cat.py` 第 211 行：
-
-```python
-if target_cat['match_score'] < 0.75:  # 修改这个值
-```
-
-推荐设置：
-- **0.75** - 默认，平衡准确度和识别率
-- **0.80** - 更严格，减少误识别
-- **0.70** - 更宽松，提高识别率
-
-### 修改检测帧率
-
-编辑 `track_specific_cat.py` 第 173 行：
-
-```python
-if frame_count % 2 == 0:  # 每2帧检测一次，改为1可以每帧都检测
-```
-
-## 📊 性能优化
-
-### CPU 模式（默认）
-- 使用场景：AMD 显卡或无独显系统
-- 处理速度：15-20 FPS
-- 内存占用：约 2GB
-
-### GPU 模式（可选）
-如果有 NVIDIA GPU，可以安装 CUDA 版本的 PyTorch：
-
-```bash
-# 卸载 CPU 版本
-pip uninstall torch torchvision
-
-# 安装 CUDA 版本
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-```
-
-## 🐛 常见问题
-
-### Q1: 找不到相机
-**A:** 检查相机连接并确认 RealSense SDK 已安装：
-```bash
-rs-enumerate-devices
-```
-
-### Q2: 识别不准确
-**A:** 可能原因：
-- 参考图片质量不佳 → 使用清晰的正面照片
-- 光照差异太大 → 在相似光照条件下使用
-- 阈值设置不当 → 调整相似度阈值
-
-### Q3: 程序运行缓慢
-**A:** 优化方法：
-- 降低检测频率（改为每 3-4 帧检测一次）
-- 使用 GPU 加速
-- 降低相机分辨率
-
-### Q4: 所有猫相似度都很低
-**A:** 正常现象：
-- 手机屏幕展示图片与真实猫差异大
-- 角度、光照、距离变化都会影响相似度
-- 真实场景中目标猫通常能达到 0.7-0.9 的相似度
-
-## 📝 技术栈
-
-- **目标检测**: YOLOv8 (Ultralytics)
-- **特征提取**: ResNet50 (torchvision)
-- **深度相机**: Intel RealSense D400 系列
-- **深度学习框架**: PyTorch (CPU/CUDA)
-- **计算机视觉**: OpenCV
-- **数值计算**: NumPy, SciPy
-
-## 🙏 致谢
-
-本项目基于以下开源项目改进：
-- [Yolo-Object-Detection-and-Distance-Measurement-with-Zed-camera](https://github.com/MehmetOKUYAR/Yolo-Object-Detection-and-Distance-Measurement-with-Zed-camera)
-- [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
-
-## 📄 许可证
-
-本项目遵循原项目的开源许可证。
+本项目是一个集成了 **深度学习猫咪追踪** (YOLOv8 + ResNet50) 与 **ROS2 机器人导航** 的综合系统。通过一个统一的 Web 界面，你可以实时监控猫咪状态、查看视频流，并通过远程桌面 (NoVNC) 直接控制机器人 RViz 进行导航。
 
 ---
 
-**Happy Tracking! 🐱**
+## ✨ 功能特性
+
+### 1. 🎯 智能追踪 (AI Tracking)
+- **目标检测**: 使用 YOLOv8n 实时检测视频流中的所有猫。
+- **特征匹配**: 使用 ResNet50 提取特征，通过余弦相似度（Default > 0.75）识别特定的目标猫。
+- **距离测量**: 利用 Intel RealSense 深度相机实时测量目标距离。
+
+### 2. 🌐 Web 控制台 (Web Interface)
+- **横向双栏布局**: 左侧视频流（完整画面），右侧 RViz 远程桌面 + 追踪控制。
+- **目标管理**: 支持上传参考图片，一键启动/停止 AI 追踪。
+- **局域网访问**: 支持从同一网络内的其他设备访问 (`http://<机器人IP>:5000`)。
+- **暗色主题**: 现代化深色 UI，适合长时间操作。
+
+### 3. 🖥️ 远程导航 (Remote Navigation)
+- **原生 RViz 集成**: 通过 NoVNC 技术，将机器人的 RViz 窗口直接嵌入网页。
+- **无缝控制**: 在网页中直接操作 RViz（设置导航点、查看雷达图、调整参数），体验与本地一致。
+- **Wayland 兼容**: 支持 Wayland 桌面环境（通过 XWayland 捕获 RViz）。
+- **智能窗口识别**: 精确匹配 RViz 窗口（`- RViz` 标题匹配），避免误捕其他窗口。
+
+---
+
+## 🛠️ 环境要求
+
+- **硬件**:
+    - Intel RealSense 深度相机 (D400 系列)
+    - 运行 Linux 的机器人底盘 (支持 ROS2 Humble)
+- **软件**:
+    - Ubuntu 22.04 + ROS2 Humble
+    - Python 3.10+
+    - 依赖库: `wmctrl`, `x11vnc`, `websockify`, `rosbridge_suite`
+    - Wayland 桌面环境需要 XWayland 支持
+
+---
+
+## 🚀 快速开始
+
+### 1. 启动机器人基础 (ROS 端)
+在机器人/远程主机上，启动底层的导航栈和 RViz。
+**注意：必须确保 RViz 窗口在屏幕上打开。**
+
+```bash
+ros2 launch wheeltec_bringup navigation.launch.py
+```
+
+### 2. 启动 Web 控制系统
+新建一个终端，运行一键启动脚本：
+
+```bash
+cd ~/nav_ws/src/Cat-Tracking-RealSense
+./launch_web_nav.sh
+```
+
+此脚本会自动：
+1.  启动 `rosbridge_server`。
+2.  启动 Flask Web 服务器 (Port 5000)。
+3.  检测 RViz 窗口并启动 VNC 串流 (Port 6080)。
+
+### 3. 打开浏览器控制
+访问: `http://localhost:5000`
+
+- **左侧**: 实时视频流（完整画面显示）。
+- **右侧**: RViz 远程桌面 + 追踪控制面板。
+    - 上传猫咪照片 → 点击 "启动追踪"。
+    - 直接在 RViz 中点击设置 `2D Nav Goal` 导航。
+
+---
+
+## 📂 项目结构
+
+```
+Cat-Tracking-RealSense/
+├── launch_web_nav.sh       # [入口] 主启动脚本
+├── launch_rviz_web.sh      # [子脚本] VNC 与 RViz 窗口管理
+├── web_app.py              # Flask 后端服务器
+├── track_specific_cat.py   # AI 追踪核心逻辑
+├── templates/
+│   └── index.html          # Web 前端界面
+├── static/
+│   ├── style.css           # 样式表
+│   ├── script.js           # 前端交互逻辑
+│   ├── nav-script.js       # 导航脚本 (备用)
+│   └── novnc/              # NoVNC 客户端库
+└── uploads/                # 上传的猫咪图片存放目录
+```
+
+---
+
+## 🐛 常见问题 (Troubleshooting)
+
+### Q: VNC 显示 "Disconnect" 或无法连接？
+- **A**: 
+  1. 确保已在桌面上**打开了 RViz**（脚本需要捕捉 RViz 窗口）。
+  2. 如在 Wayland 环境下，确保 RViz 通过 XWayland 运行。
+  3. 检查 `/tmp/x11vnc.log` 查看错误日志。
+
+### Q: VNC 显示了错误的窗口？
+- **A**: 脚本通过匹配窗口标题中的 `- RViz` 来识别 RViz。确保 RViz 窗口标题包含此字符串。可用 `wmctrl -l` 查看所有窗口。
+
+### Q: 无法在网页中点击/控制 RViz？
+- **A**: 确保安装了 `wmctrl`: `sudo apt install wmctrl`。
+
+### Q: 视频流卡顿？
+- **A**: 检查网络带宽。VNC 配置了 `-noxdamage -noshm` 优化参数，主要瓶颈可能在 WiFi 信号。
+
+### Q: AI 无法识别我的猫？
+- **A**: 请上传一张光线充足、特征清晰的**正面**照片。
+
+---
+
+## 📄 许可证
+本项目遵循开源许可证。

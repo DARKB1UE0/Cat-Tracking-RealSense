@@ -1,34 +1,36 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>猫咪追踪系统 - Cat Tracking</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🐱 猫咪追踪系统</h1>
-            <p class="subtitle">使用YOLOv8 + ResNet50 + RealSense相机追踪特定的猫</p>
-        </header>
 
-        <main>
-            <!-- 状态指示器 -->
-            <div id="status-indicator" class="status-box">
+<body>
+    <div class="app">
+        <!-- 顶部标题栏 -->
+        <header class="top-header">
+            <h1>🐱 猫咪追踪系统</h1>
+            <div class="header-status">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">就绪</span>
             </div>
+        </header>
 
-            <!-- 视频流显示区域 -->
-            <div class="video-section">
-                <h2>📹 实时视频流</h2>
-                <div class="video-container">
+        <!-- 主内容区域：横向排列 -->
+        <div class="content-row">
+            <!-- 左侧：视频流（占大部分） -->
+            <div class="video-panel">
+                <div class="video-wrapper">
                     <img id="video-stream" src="/video_feed" alt="Camera Stream">
                     <div class="video-overlay" id="video-overlay">
                         <div class="overlay-content">
                             <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <path
+                                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                </path>
                                 <circle cx="12" cy="13" r="4"></circle>
                             </svg>
                             <p>RealSense相机视频流</p>
@@ -38,72 +40,53 @@
                 </div>
             </div>
 
-            <!-- 上传区域 -->
-            <div class="upload-section">
-                <h2>1. 上传参考猫照片</h2>
-                <p class="instruction">请上传一张清晰的猫照片作为追踪目标</p>
-                
-                <div class="upload-area" id="upload-area">
-                    <input type="file" id="file-input" accept="image/*" style="display: none;">
-                    <div class="upload-placeholder" id="upload-placeholder">
-                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        <p>点击选择或拖拽图片到这里</p>
-                        <p class="file-types">支持 JPG, PNG, GIF, BMP 格式</p>
+            <!-- 右侧栏 -->
+            <div class="side-panel">
+                <!-- VNC 远程桌面（小块） -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2>🖥️ 远程桌面 (RViz)</h2>
+                        <div class="vnc-status">
+                            <span class="status-dot ready" id="vnc-status-dot"></span>
+                            <span id="ros-status-text">VNC (:0)</span>
+                        </div>
                     </div>
-                    <div id="preview-container" class="preview-container" style="display: none;">
-                        <img id="preview-image" src="" alt="预览">
-                        <button id="remove-image" class="remove-btn">✕</button>
+                    <div class="vnc-container" id="vnc-container">
+                        <iframe id="vnc-frame"
+                            src="http://{{ request.host.split(':')[0] }}:6080/vnc.html?autoconnect=true&resize=scale&view_only=false"
+                            style="width: 100%; height: 100%; border: none;"></iframe>
                     </div>
                 </div>
 
-                <button id="upload-btn" class="btn btn-primary" disabled>
-                    上传照片
-                </button>
-            </div>
-
-            <!-- 控制区域 -->
-            <div class="control-section">
-                <h2>2. 启动追踪</h2>
-                <p class="instruction">上传照片并启动相机后点击下方按钮开始追踪</p>
-                
-                <div class="button-group">
-                    <button id="start-btn" class="btn btn-success" disabled>
-                        🚀 启动追踪
-                    </button>
-                    <button id="stop-btn" class="btn btn-danger" disabled>
-                        ⏹ 停止追踪
-                    </button>
+                <!-- 上传区域 -->
+                <div class="card">
+                    <h2>🎯 追踪控制</h2>
+                    <div class="upload-area" id="upload-area">
+                        <input type="file" id="file-input" accept="image/*" style="display: none;">
+                        <div class="upload-placeholder" id="upload-placeholder">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <p>点击选择或拖拽猫照片</p>
+                            <p class="file-types">JPG / PNG / GIF / BMP</p>
+                        </div>
+                        <div id="preview-container" class="preview-container" style="display: none;">
+                            <img id="preview-image" src="" alt="预览">
+                            <button id="remove-image" class="remove-btn">✕</button>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="upload-btn" class="btn btn-primary" disabled>上传照片</button>
+                    </div>
+                    <div class="button-group" style="margin-top: 8px;">
+                        <button id="start-btn" class="btn btn-success" disabled>🚀 启动追踪</button>
+                        <button id="stop-btn" class="btn btn-danger" disabled>⏹ 停止追踪</button>
+                    </div>
                 </div>
             </div>
-
-            <!-- 信息提示 -->
-            <div class="info-section">
-                <h3>使用说明</h3>
-                <ul>
-                    <li>确保RealSense相机已连接</li>
-                    <li>点击"启动相机"查看实时视频流</li>
-                    <li>上传一张清晰的目标猫照片</li>
-                    <li>点击"启动追踪"开始识别</li>
-                    <li>在视频流中查看实时追踪结果</li>
-                </ul>
-                
-                <h3>技术特性</h3>
-                <ul>
-                    <li>✅ YOLOv8 实时猫检测</li>
-                    <li>✅ ResNet50 深度特征提取</li>
-                    <li>✅ 余弦相似度精确匹配</li>
-                    <li>✅ RealSense 深度测距</li>
-                </ul>
-            </div>
-        </main>
-
-        <footer>
-            <p>Cat Tracking System © 2026</p>
-        </footer>
+        </div>
     </div>
 
     <!-- 消息提示 -->
@@ -111,4 +94,5 @@
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
+
 </html>

@@ -19,7 +19,7 @@ pip install -r requirements.txt
 运行以下命令启动Flask Web服务器：
 
 ```bash
-python web_app.py
+python3 web_app.py
 ```
 
 服务器将在 `http://localhost:5000` 启动。
