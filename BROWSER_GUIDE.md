@@ -1,8 +1,12 @@
 # 猫咪追踪Web应用 - 浏览器视频流版本
 
+本页说明视频与识别操作。完整的网页启动、键盘驾驶和 RViz 使用流程见 [网页使用说明](README.md)，建图及已有地图导航见 [工作空间 README](../README.md)。
+
 ## ✨ 新功能
 
 现在可以**直接在浏览器中查看实时视频流**，无需打开额外的OpenCV窗口！
+
+网页也支持**键盘驾驶**：W/S 前后移动、A/D 左右平移、J/K 左右转向。启动 `./launch_web_nav.sh` 后，在网页点击「启用键盘驾驶」，按住移动、松开停止，空格或 Esc 停止并退出驾驶。完整说明见 [网页导航控制系统：键盘驾驶](WEB_NAV_README.md#4-键盘驾驶)。
 
 ## 🚀 快速开始
 
@@ -10,9 +14,15 @@
 在终端按 `Ctrl+C` 停止当前运行的服务器。
 
 ### 2. 重新启动服务器
+
+仅使用视频与识别时：
+
 ```bash
-python web_app.py
+cd ~/nav_ws/src/Cat-Tracking-RealSense
+python3 web_app.py
 ```
+
+同时使用网页驾驶和 RViz 时，先按网页使用说明启动 ROS 系统，再从项目目录执行 `./launch_web_nav.sh`，不要同时重复运行 `web_app.py`。
 
 ### 3. 打开浏览器
 访问 `http://localhost:5000`

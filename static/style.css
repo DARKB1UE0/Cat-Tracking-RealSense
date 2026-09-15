@@ -175,6 +175,75 @@ body {
     margin-bottom: 10px;
 }
 
+/* ===== 键盘驾驶 ===== */
+.teleop-card {
+    flex-shrink: 0;
+}
+
+.teleop-status, .teleop-hint {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.teleop-status.active {
+    color: var(--primary-color);
+}
+
+.teleop-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.teleop-keys span {
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    background: var(--card-bg-light);
+}
+
+.teleop-keys .pressed {
+    background: var(--primary-color);
+    color: white;
+}
+
+.teleop-keys kbd {
+    font: inherit;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+.teleop-speeds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.teleop-speeds label {
+    flex: 1;
+    min-width: 150px;
+    font-size: 0.8rem;
+}
+
+.teleop-speeds output {
+    float: right;
+    color: var(--text-muted);
+}
+
+.teleop-speeds input {
+    display: block;
+    width: 100%;
+    margin-top: 6px;
+    accent-color: var(--primary-color);
+}
+
+.teleop-hint {
+    margin-top: 10px;
+}
+
 /* ===== VNC 容器 ===== */
 .vnc-container {
     width: 100%;

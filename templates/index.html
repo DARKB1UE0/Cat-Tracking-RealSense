@@ -42,6 +42,34 @@
 
             <!-- 右侧栏 -->
             <div class="side-panel">
+                <section class="card teleop-card" aria-labelledby="teleop-title">
+                    <div class="card-header">
+                        <h2 id="teleop-title">🎮 键盘驾驶</h2>
+                        <span id="teleop-status" class="teleop-status" role="status">正在连接底盘通信…</span>
+                    </div>
+                    <div class="teleop-keys" aria-label="键位说明">
+                        <span data-drive-key="KeyW"><kbd>W</kbd> 前进</span>
+                        <span data-drive-key="KeyS"><kbd>S</kbd> 后退</span>
+                        <span data-drive-key="KeyA"><kbd>A</kbd> 左移</span>
+                        <span data-drive-key="KeyD"><kbd>D</kbd> 右移</span>
+                        <span data-drive-key="KeyJ"><kbd>J</kbd> 左转</span>
+                        <span data-drive-key="KeyK"><kbd>K</kbd> 右转</span>
+                    </div>
+                    <div class="teleop-speeds">
+                        <label for="teleop-linear">移动速度 <output id="teleop-linear-value" for="teleop-linear">0.20 m/s</output>
+                            <input id="teleop-linear" type="range" min="0.05" max="0.50" step="0.05" value="0.20">
+                        </label>
+                        <label for="teleop-angular">转向速度 <output id="teleop-angular-value" for="teleop-angular">0.50 rad/s</output>
+                            <input id="teleop-angular" type="range" min="0.10" max="1.00" step="0.10" value="0.50">
+                        </label>
+                    </div>
+                    <div class="button-group">
+                        <button id="teleop-toggle" class="btn btn-primary" type="button" aria-pressed="false" disabled>启用键盘驾驶</button>
+                        <button id="teleop-stop" class="btn btn-danger" type="button" disabled>停止（空格）</button>
+                    </div>
+                    <p class="teleop-hint">先取消 RViz 中的导航任务，再启用驾驶。按住移动，松开停止；支持组合键。切换窗口或点击 RViz 后需重新启用。</p>
+                </section>
+
                 <!-- VNC 远程桌面（小块） -->
                 <div class="card">
                     <div class="card-header">
@@ -93,6 +121,7 @@
     <div id="toast" class="toast"></div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='teleop.js') }}"></script>
 </body>
 
 </html>
