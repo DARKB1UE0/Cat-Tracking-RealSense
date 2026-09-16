@@ -1,37 +1,113 @@
-"""USB CDC protocol for the BasicFramework_F4 gimbal controller."""
-import struct, time, serial
+"""USB CDC gimbal protocol. Angles: degrees relative to firmware boot reference."""
+import math
+import struct
 
 SOF = b"\xaa\x55"
 VERSION = 1
+MAX_PAYLOAD = 32
 SETPOINT, ENABLE, STOP, PING, STATUS = 1, 2, 3, 4, 0x81
+STATUS_FORMAT = struct.Struct("<ffBBHI")
+SETPOINT_FORMAT = struct.Struct("<ffBBH")
+FAULT_NAMES = {
+    1: "host_timeout", 2: "yaw_offline", 4: "pitch_offline",
+    8: "dm_error", 16: "angle_limit", 32: "not_referenced",
+}
+
 
 def crc16(data: bytes) -> int:
     crc = 0xffff
-    for b in data:
-        crc ^= b
-        for _ in range(8): crc = ((crc >> 1) ^ 0xa001) if crc & 1 else crc >> 1
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc >> 1) ^ 0xa001) if crc & 1 else crc >> 1
     return crc
 
+
 def frame(kind, seq, payload=b""):
-    body = struct.pack("<BBB H", VERSION, kind, seq & 255, len(payload)) + payload
+    if len(payload) > MAX_PAYLOAD:
+        raise ValueError("payload exceeds 32 bytes")
+    body = struct.pack("<BBBH", VERSION, kind, seq & 255, len(payload)) + payload
     return SOF + body + struct.pack("<H", crc16(body))
 
+
+class FrameParser:
+    """Retain partial frames and recover from noise, oversized lengths and CRC errors."""
+    def __init__(self):
+        self.buffer = bytearray()
+
+    def feed(self, data):
+        self.buffer.extend(data)
+        frames = []
+        while len(self.buffer) >= 2:
+            start = self.buffer.find(SOF)
+            if start < 0:
+                self.buffer[:] = self.buffer[-1:] if self.buffer[-1] == SOF[0] else b""
+                break
+            if start:
+                del self.buffer[:start]
+            if len(self.buffer) < 7:
+                break
+            version, kind, seq, size = struct.unpack_from("<BBBH", self.buffer, 2)
+            if version != VERSION or size > MAX_PAYLOAD:
+                del self.buffer[0]
+                continue
+            total = 9 + size
+            if len(self.buffer) < total:
+                break
+            expected = struct.unpack_from("<H", self.buffer, 7 + size)[0]
+            if crc16(self.buffer[2:7 + size]) != expected:
+                del self.buffer[0]
+                continue
+            frames.append((kind, seq, bytes(self.buffer[7:7 + size])))
+            del self.buffer[:total]
+        return frames
+
+
 class GimbalUsb:
-    def __init__(self, port, baudrate=115200, timeout=0.02):
-        self.ser, self.seq = serial.Serial(port, baudrate, timeout=timeout), 0
+    def __init__(self, port=None, baudrate=115200, timeout=0.0, serial_port=None):
+        if serial_port is None:
+            import serial
+            serial_port = serial.Serial(port, baudrate, timeout=timeout, write_timeout=0.05)
+        self.ser = serial_port
+        self.seq = 0
+        self.parser = FrameParser()
+
+    def _send(self, kind, payload=b""):
+        packet = frame(kind, self.seq, payload)
+        if self.ser.write(packet) != len(packet):
+            raise IOError("incomplete USB serial write")
+        self.seq = (self.seq + 1) & 255
+
     def send_setpoint(self, yaw_deg, pitch_deg, enable=True):
-        payload = struct.pack("<ffBBH", yaw_deg, pitch_deg, 1 if enable else 0, 0, 0)
-        self.ser.write(frame(SETPOINT, self.seq, payload)); self.seq += 1
-    def enable(self): self.ser.write(frame(ENABLE, self.seq)); self.seq += 1
-    def stop(self): self.ser.write(frame(STOP, self.seq)); self.seq += 1
-    def ping(self): self.ser.write(frame(PING, self.seq)); self.seq += 1
+        if not math.isfinite(yaw_deg) or not math.isfinite(pitch_deg):
+            raise ValueError("gimbal angles must be finite")
+        self._send(SETPOINT, SETPOINT_FORMAT.pack(yaw_deg, pitch_deg, int(bool(enable)), 0, 0))
+
+    def enable(self):
+        """Requires a valid target received within 100 ms; cannot revive an expired target."""
+        self._send(ENABLE)
+
+    def stop(self):
+        self._send(STOP)
+
+    def ping(self):
+        """Request real status; does not keep motors running."""
+        self._send(PING)
+
+    def read_statuses(self):
+        data = self.ser.read(min(self.ser.in_waiting, 4096))
+        result = []
+        for kind, _seq, payload in self.parser.feed(data):
+            if kind == STATUS and len(payload) == STATUS_FORMAT.size:
+                status = STATUS_FORMAT.unpack(payload)
+                if (all(math.isfinite(v) for v in status[:2]) and
+                        status[2] in (0, 1) and status[4] == 0):
+                    result.append(status)
+        return result
+
     def read_status(self):
-        data = self.ser.read(64)
-        i = data.find(SOF)
-        if i < 0 or len(data) < i + 9: return None
-        n = struct.unpack_from("<H", data, i + 5)[0]
-        if len(data) < i + 9 + n: return None
-        body = data[i+2:i+7+n]
-        if crc16(body) != struct.unpack_from("<H", data, i+7+n)[0] or body[1] != STATUS: return None
-        if n == 16: return struct.unpack_from("<ffBBHI", data, i+7)
-        return None
+        statuses = self.read_statuses()
+        return statuses[-1] if statuses else None
+
+    def close(self):
+        self.ser.close()
