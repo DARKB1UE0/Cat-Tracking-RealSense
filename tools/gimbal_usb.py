@@ -1,4 +1,4 @@
-"""USB CDC gimbal protocol. Angles: degrees relative to configured installation zero."""
+"""USB CDC gimbal protocol. Angles: degrees relative to motor encoder zero."""
 import math
 import struct
 
