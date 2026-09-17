@@ -1,4 +1,4 @@
-"""USB CDC gimbal protocol. Angles: degrees relative to firmware boot reference."""
+"""USB CDC gimbal protocol. Angles: degrees relative to motor encoder zero."""
 import math
 import struct
 
@@ -9,6 +9,7 @@ SETPOINT, ENABLE, STOP, PING, STATUS = 1, 2, 3, 4, 0x81
 STATUS_FORMAT = struct.Struct("<ffBBHI")
 SETPOINT_FORMAT = struct.Struct("<ffBBH")
 FAULT_NAMES = {
+    # host_timeout is informational: firmware may be actively holding zero.
     1: "host_timeout", 2: "yaw_offline", 4: "pitch_offline",
     8: "dm_error", 16: "angle_limit", 32: "not_referenced",
 }
@@ -88,10 +89,11 @@ class GimbalUsb:
         self._send(ENABLE)
 
     def stop(self):
+        """Latch motor stop, including during host silence; send a new target to resume."""
         self._send(STOP)
 
     def ping(self):
-        """Request real status; does not keep motors running."""
+        """Request real status; does not refresh the target or change zero hold/STOP."""
         self._send(PING)
 
     def read_statuses(self):

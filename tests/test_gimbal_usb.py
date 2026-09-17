@@ -115,7 +115,14 @@ def load_bridge_with_ros_stubs():
     # Exercise actual bridge callbacks. This does not exercise the ROS executor/DDS.
     modules = {name: ModuleType(name) for name in
                ("rclpy", "rclpy.node", "rclpy.qos", "std_msgs", "std_msgs.msg")}
-    modules["rclpy.node"].Node = object
+    class NodeStub:
+        def __init__(self, name):
+            self.declare_parameter = lambda name, default: SimpleNamespace(value=default)
+            self.create_publisher = Mock()
+            self.create_subscription = Mock()
+            self.create_timer = Mock()
+            self.get_logger = Mock(return_value=Mock())
+    modules["rclpy.node"].Node = NodeStub
     modules["rclpy.qos"].QoSProfile = Mock()
     modules["rclpy.qos"].DurabilityPolicy = SimpleNamespace(VOLATILE=0)
     modules["std_msgs.msg"].Float32MultiArray = lambda **kw: SimpleNamespace(**kw)
@@ -144,6 +151,11 @@ class BridgeCallbackTests(unittest.TestCase):
         self.node.command(SimpleNamespace(data=[0, 0, 0]))
         self.node.usb.stop.assert_called_once_with()
 
+    def test_startup_sends_no_command_that_overrides_firmware_idle_policy(self):
+        with patch.object(self.module, "GimbalUsb") as client:
+            self.module.GimbalUsbNode()
+            self.assertEqual(client.return_value.mock_calls, [])
+
     def test_invalid_commands_do_not_transmit(self):
         for data in ([], [1], [1, 2, 3], [1, 2, 1, 0], [float("nan"), 0]):
             self.node.command(SimpleNamespace(data=data))
@@ -164,10 +176,11 @@ class BridgeCallbackTests(unittest.TestCase):
         self.node.usb.send_setpoint.assert_called_once()
         self.node.usb.read_status.assert_not_called()
 
-    def test_close_releases_port_even_if_stop_fails(self):
-        self.node.usb.stop.side_effect = OSError("disconnected")
+    def test_close_leaves_default_zero_hold_or_explicit_stop_to_firmware(self):
         self.node.close()
         self.node.usb.close.assert_called_once_with()
+        self.node.usb.stop.assert_not_called()
+        self.node.usb.send_setpoint.assert_not_called()
 
 
 if __name__ == "__main__":

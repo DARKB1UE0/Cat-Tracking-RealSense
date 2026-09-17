@@ -21,13 +21,12 @@ class GimbalUsbNode(Node):
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.VOLATILE)
         self.sub = self.create_subscription(Float32MultiArray, "/gimbal/command", self.command, qos)
         self.timer = self.create_timer(0.01, self.poll)
-        # Explicit STOP on connection; never resume a target after restart.
-        self.usb.stop()
-        self.get_logger().info(f"云台 USB 已连接: {port}；指令建议 50 Hz，100 ms 无指令停止")
+        # Leave idle/STOP policy to firmware; opening the bridge sends no command.
+        self.get_logger().info(f"云台 USB 已连接: {port}；指令建议 50 Hz，100 ms 无指令回零保持，显式 STOP 持续停机")
 
     def fail(self, exc):
         if not self.failed:
-            self.get_logger().error(f"USB 通信失败，已停用接口；下位机将超时停止: {exc}")
+            self.get_logger().error(f"USB 通信失败，已停用接口；下位机超时回零保持，STOP 与电机故障优先: {exc}")
             self.failed = True
 
     def command(self, msg):
@@ -60,12 +59,8 @@ class GimbalUsbNode(Node):
                 float(status[3]), float(status[5])]))
 
     def close(self):
-        try:
-            self.usb.stop()
-        except OSError:
-            pass
-        finally:
-            self.usb.close()
+        # Silence selects firmware zero hold; only an explicit command latches STOP.
+        self.usb.close()
 
 
 def main(args=None):
