@@ -1,0 +1,12 @@
+{
+  "mode": "gimbal",
+  "map_frame": "map",
+  "mount_xyz_m": [0.0, 0.0, 0.15],
+  "mount_rpy_deg": [0.0, 0.0, 0.0],
+  "pitch_xyz_m": [0.0, 0.0, 0.0],
+  "camera_xyz_m": [0.0, 0.0, 0.0],
+  "camera_rpy_deg": [-90.0, 0.0, -90.0],
+  "yaw_sign": 1,
+  "pitch_sign": 1,
+  "follow_pitch": false
+}

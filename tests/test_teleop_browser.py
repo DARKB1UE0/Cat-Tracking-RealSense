@@ -32,6 +32,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 @unittest.skipUnless(CHROME, 'Chrome/Chromium is required')
 class TeleopBrowserTest(unittest.TestCase):
     def test_keyboard_driving(self):
+        self.run_browser('teleop', 20)
+
+    def test_gimbal_sliders(self):
+        self.run_browser('gimbal', 12)
+
+    def run_browser(self, feature, minimum_checks):
         with tempfile.TemporaryDirectory(prefix='cat-teleop-test-') as directory:
             root = Path(directory)
             shutil.copytree(ROOT / 'static', root / 'static',
@@ -44,7 +50,9 @@ class TeleopBrowserTest(unittest.TestCase):
             page = re.sub(r'src="http://[^\"]+:6080/[^\"]+"', 'src="about:blank"', page)
             page = page.replace('src="/video_feed"', '')
             page = page.replace('<script src="/static/script.js"></script>', '')
-            harness = (ROOT / 'tests' / 'teleop_browser.js').read_text()
+            excluded = 'gimbal' if feature == 'teleop' else 'teleop'
+            page = page.replace(f'<script src="/static/{excluded}.js"></script>', '')
+            harness = (ROOT / 'tests' / f'{feature}_browser.js').read_text()
             page = page.replace('</head>', '<script>' + harness + '</script></head>')
             (root / 'index.html').write_text(page)
             server = http.server.ThreadingHTTPServer(
@@ -68,7 +76,7 @@ class TeleopBrowserTest(unittest.TestCase):
             self.assertIsNotNone(match, result.stderr[-3000:] + result.stdout[-3000:])
             report = json.loads(html.unescape(match.group(1)))
             self.assertEqual(report['failures'], [], json.dumps(report, ensure_ascii=False, indent=2))
-            self.assertGreaterEqual(len(report['passed']), 20)
+            self.assertGreaterEqual(len(report['passed']), minimum_checks)
             print('\nBrowser checks:', ', '.join(report['passed']))
 
 

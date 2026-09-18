@@ -42,6 +42,33 @@
 
             <!-- 右侧栏 -->
             <div class="side-panel">
+                <section class="card gimbal-card" aria-labelledby="gimbal-title">
+                    <div class="card-header">
+                        <h2 id="gimbal-title">云台控制</h2>
+                        <span id="gimbal-status" role="status">正在连接云台…</span>
+                    </div>
+                    <div class="gimbal-axes">
+                        <div class="gimbal-axis">
+                            <label for="gimbal-yaw">水平 Yaw <output id="gimbal-yaw-value" for="gimbal-yaw">0.0°</output></label>
+                            <input id="gimbal-yaw" type="range" min="-90" max="90" step="0.5" value="0" disabled>
+                            <div class="gimbal-scale"><span>−90°</span><span>0°</span><span>+90°</span></div>
+                            <p>实际角度 <span id="gimbal-yaw-actual">—</span></p>
+                        </div>
+                        <div class="gimbal-axis">
+                            <label for="gimbal-pitch">俯仰 Pitch <output id="gimbal-pitch-value" for="gimbal-pitch">0.0°</output></label>
+                            <input id="gimbal-pitch" type="range" min="-30" max="30" step="0.5" value="0" disabled>
+                            <div class="gimbal-scale"><span>−30°</span><span>0°</span><span>+30°</span></div>
+                            <p>实际角度 <span id="gimbal-pitch-actual">—</span></p>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="gimbal-toggle" class="btn btn-primary" type="button" aria-pressed="false" disabled>启用云台控制</button>
+                        <button id="gimbal-home" class="btn btn-secondary" type="button" disabled>一键回零</button>
+                        <button id="gimbal-stop" class="btn btn-danger" type="button" disabled>停止云台</button>
+                    </div>
+                    <p id="gimbal-detail" class="gimbal-hint">等待下位机状态</p>
+                    <p class="gimbal-hint">启用后拖动滑条，松开保持目标角度；回零将双轴设为 0°（电机原点）。切换窗口或离开页面会停止输出，恢复后需重新启用。</p>
+                </section>
                 <section class="card teleop-card" aria-labelledby="teleop-title">
                     <div class="card-header">
                         <h2 id="teleop-title">🎮 键盘驾驶</h2>
@@ -89,6 +116,7 @@
                 <!-- 上传区域 -->
                 <div class="card">
                     <h2>🎯 追踪控制</h2>
+                    <p id="cat-location-status" class="gimbal-hint" role="status">地图标注：等待目标识别</p>
                     <div class="upload-area" id="upload-area">
                         <input type="file" id="file-input" accept="image/*" style="display: none;">
                         <div class="upload-placeholder" id="upload-placeholder">
@@ -122,6 +150,7 @@
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script src="{{ url_for('static', filename='teleop.js') }}"></script>
+    <script src="{{ url_for('static', filename='gimbal.js') }}"></script>
 </body>
 
 </html>

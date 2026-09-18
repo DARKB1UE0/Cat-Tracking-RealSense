@@ -479,3 +479,22 @@ body {
         border-top: 1px solid var(--border-color);
     }
 }
+
+/* 云台：目标滑条与实测角度分别显示。 */
+.gimbal-card { flex-shrink: 0; }
+#gimbal-status, .gimbal-hint, .gimbal-axis p, .gimbal-scale {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+#gimbal-status.active { color: var(--primary-color); }
+.gimbal-axes { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 12px; }
+.gimbal-axis { flex: 1; min-width: 180px; }
+.gimbal-axis label { display: block; font-size: 0.85rem; }
+.gimbal-axis output { float: right; color: var(--primary-color); font-variant-numeric: tabular-nums; }
+.gimbal-axis input { width: 100%; height: 28px; accent-color: var(--primary-color); cursor: pointer; }
+.gimbal-axis input:disabled { opacity: 0.4; cursor: not-allowed; }
+.gimbal-axis input:focus-visible { outline: 2px solid var(--secondary-color); outline-offset: 3px; }
+.gimbal-scale { display: flex; justify-content: space-between; }
+.gimbal-axis p { margin-top: 4px; }
+.gimbal-hint { margin-top: 8px; }
+.gimbal-card .button-group { flex-wrap: wrap; }

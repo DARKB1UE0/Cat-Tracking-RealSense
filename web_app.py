@@ -12,8 +12,14 @@ from track_specific_cat import CatTracker
 import cv2
 import numpy as np
 import pyrealsense2 as rs
+from gimbal_web import install_gimbal
+from cat_markers import CatMarkers, target_point
+import atexit
 
 app = Flask(__name__)
+gimbal_controller = install_gimbal(app)
+cat_markers = CatMarkers()
+atexit.register(cat_markers.close)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 最大16MB
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
@@ -64,6 +70,7 @@ def init_camera():
 def stop_camera():
     """停止RealSense相机"""
     global pipeline, camera_active
+    cat_markers.clear('相机已停止')
     if pipeline:
         try:
             pipeline.stop()
@@ -93,6 +100,9 @@ def generate_frames():
             
             if not color_frame or not depth_frame:
                 continue
+
+            # Snapshot the receive time and measured pose before slow inference.
+            capture = cat_markers.capture(gimbal_controller.snapshot()) if tracking_active else None
             
             color_image = np.asanyarray(color_frame.get_data())
             depth_image = np.asanyarray(depth_frame.get_data())
@@ -105,9 +115,10 @@ def generate_frames():
             display_image = color_image.copy()
             
             # 如果正在追踪，进行检测和绘制
-            if tracking_active and tracker_instance and frame_count % 2 == 0:
+            tracker = tracker_instance
+            if tracking_active and tracker and frame_count % 2 == 0:
                 try:
-                    results = tracker_instance.yolo_model(color_image, verbose=False)
+                    results = tracker.yolo_model(color_image, verbose=False)
                     cats = []
                     
                     if results[0].boxes is not None:
@@ -129,7 +140,7 @@ def generate_frames():
                                 
                                 if w > 30 and h > 30:
                                     cat_roi = color_image[y:y+h, x:x+w]
-                                    match_score = tracker_instance.match_cat(cat_roi)
+                                    match_score = tracker.match_cat(cat_roi)
                                     cats.append({
                                         'box': (x, y, w, h),
                                         'confidence': confidence,
@@ -149,6 +160,18 @@ def generate_frames():
                             if score_gap < 0.05:
                                 target_cat = None
                     
+                    # Only the reference-matched target receives a 3-D marker.
+                    # Stopping/replacing tracking invalidates in-flight inference.
+                    if tracking_active and tracker_instance is tracker:
+                        if target_cat:
+                            point = target_point(depth_frame, target_cat['box'], rs.rs2_deproject_pixel_to_point)
+                            if point is not None:
+                                cat_markers.observe(point, capture)
+                            else:
+                                cat_markers.clear('目标深度无效，暂不标注')
+                        else:
+                            cat_markers.clear()
+
                     # 绘制结果
                     for cat in cats:
                         x, y, w, h = cat['box']
@@ -186,6 +209,7 @@ def generate_frames():
                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
                     
                 except Exception as e:
+                    cat_markers.clear('识别处理失败，已清除标注')
                     print(f"追踪处理错误: {e}")
             
             # 添加帧信息
@@ -203,6 +227,7 @@ def generate_frames():
             time.sleep(0.033)  # ~30fps
             
         except Exception as e:
+            cat_markers.clear('相机帧读取失败，已清除标注')
             print(f"帧生成错误: {e}")
             time.sleep(0.1)
 
@@ -210,6 +235,9 @@ def generate_frames():
 def run_tracker(image_path):
     """初始化追踪器（不运行run方法）"""
     global tracking_active, tracker_instance
+    cat_markers.clear('等待目标识别')
+    cat_markers.start()
+    gimbal_controller.start()
     try:
         tracker_instance = CatTracker(image_path)
         tracking_active = True
@@ -337,6 +365,7 @@ def stop_tracking():
     
     tracking_active = False
     tracker_instance = None
+    cat_markers.clear('追踪已停止')
     
     return jsonify({
         'success': True,
@@ -350,7 +379,8 @@ def get_status():
     return jsonify({
         'tracking_active': tracking_active,
         'has_tracker': tracker_instance is not None,
-        'camera_active': camera_active
+        'camera_active': camera_active,
+        'cat_location': cat_markers.snapshot()
     })
 
 
@@ -416,6 +446,8 @@ if __name__ == '__main__':
     try:
         app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
     finally:
+        cat_markers.close()
+        gimbal_controller.close()
         print("\n正在关闭相机...")
         stop_camera()
         print("服务器已停止")

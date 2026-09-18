@@ -26,7 +26,7 @@ source ~/nav_ws/install/setup.bash
 ros2 launch wheeltec_bringup slam_navigation.launch.py
 ```
 
-默认串口为 `/dev/ttyACM0`，可通过 `serial_port:=/dev/ttyUSB0` 覆盖。若使用已有地图，改用 `bringup.launch.py mode:=nav map:=...`，具体命令见工作空间 README。单独的 `navigation.launch.py` 不会启动底盘、雷达或 RViz。
+默认串口为 `/dev/serial/by-id/usb-WCH.CN_USB_Single_Serial_0002-if00`，可通过 `serial_port:=/dev/ttyUSB0` 覆盖。若使用已有地图，改用 `bringup.launch.py mode:=nav map:=...`，具体命令见工作空间 README。单独的 `navigation.launch.py` 不会启动底盘、雷达或 RViz。
 
 启动 VNC 前必须保证本机图形桌面上已有 RViz 窗口。
 
@@ -87,3 +87,9 @@ cd ~/nav_ws/src/Cat-Tracking-RealSense
 - **无法连接 ROS?**
     - 确保 `rosbridge_server` 启动成功。
     - 确保浏览器和机器人处于同一局域网。
+
+## RViz 目标猫位置
+
+识别参考图对应的目标猫后，网页发布 `/cat/position` 和 `/cat/markers`；RViz 的 **Target Cat** 显示绿色位置球和坐标文字。相机近似位于车体中心和车顶高度（相对 base_link 高 0.15 m），位置叠加云台实测 yaw，再转换到地图；yaw=0 时朝前，Pitch 暂按水平近似。目标丢失或停止追踪会清除标注。
+
+首次使用需重启网页服务；通过建图或导航 launch 启动的 RViz 会自动添加并启用 `/cat/markers`（Target Cat），无需手动 Add。已经打开的 RViz 可通过 File → Open Config 重新加载对应配置。配置和标注精度说明见 [目标猫位置标注](docs/cat_rviz_markers.md)。

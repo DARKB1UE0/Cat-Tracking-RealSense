@@ -270,6 +270,15 @@ function startStatusPolling() {
             const data = await response.json();
 
             // 更新相机状态
+            const location = data.cat_location;
+            if (location) {
+                const coordinates = location.position
+                    ? ` · ${location.position.map(value => value.toFixed(2)).join(', ')} m`
+                    : '';
+                document.getElementById('cat-location-status').textContent =
+                    '地图标注：' + location.message + coordinates;
+            }
+
             if (data.camera_active) {
                 videoOverlay.classList.add('hidden');
             } else {

@@ -44,7 +44,7 @@ ros2 launch wheeltec_bringup bringup.launch.py mode:=nav \
   map:="$HOME/nav_ws/maps/testroom.yaml"
 ```
 
-完整启动默认串口为 `/dev/ttyACM0`，必要时追加 `serial_port:=/dev/ttyUSB0`。已有地图模式使用 AMCL，需在 RViz 中确认或设置初始位姿。单独运行 `navigation.launch.py` 不会启动底盘、雷达或 RViz，不能替代上述完整入口。
+完整启动默认串口为 `/dev/serial/by-id/usb-WCH.CN_USB_Single_Serial_0002-if00`，必要时追加 `serial_port:=/dev/ttyUSB0`。已有地图模式使用 AMCL，需在 RViz 中确认或设置初始位姿。单独运行 `navigation.launch.py` 不会启动底盘、雷达或 RViz，不能替代上述完整入口。
 
 ### 终端 2：启动网页
 
@@ -149,3 +149,9 @@ python3 -m unittest discover -s tests -v
 ```
 
 阶段性开发、修复或联调完成后，按工作日志中的模板补充验证结果和待办事项。项目许可证见 [LICENSE](LICENSE)，内嵌组件遵循各自许可声明。
+
+## RViz 目标猫位置
+
+识别参考图对应的目标猫后，网页发布 `/cat/position` 和 `/cat/markers`；RViz 的 **Target Cat** 显示绿色位置球和坐标文字。相机近似位于车体中心和车顶高度（相对 base_link 高 0.15 m），位置叠加云台实测 yaw，再转换到地图；yaw=0 时朝前，Pitch 暂按水平近似。目标丢失或停止追踪会清除标注。
+
+首次使用需重启网页服务；通过建图或导航 launch 启动的 RViz 会自动添加并启用 `/cat/markers`（Target Cat），无需手动 Add。已经打开的 RViz 可通过 File → Open Config 重新加载对应配置。配置和标注精度说明见 [目标猫位置标注](docs/cat_rviz_markers.md)。

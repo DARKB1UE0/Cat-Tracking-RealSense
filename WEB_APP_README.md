@@ -166,3 +166,11 @@ app.run(debug=True, host='0.0.0.0', port=5001, use_reloader=False)
 ## 📄 许可证
 
 请参考项目根目录下的LICENSE文件。
+
+## 云台滑条与一键回零
+
+网页现已包含 yaw / pitch 鼠标滑条，Yaw 目标支持 **−90°～+90°**、Pitch 目标支持 **−30°～+30°**，并显示下位机返回的实际角度。支持启用控制、一键双轴回零、停止输出，鼠标松开后保持角度。
+
+启动前用 `GIMBAL_USB_PORT` 指定 C 板 USB CDC 串口；后端直接连接 USB，不要同时启动占用该串口的 `ros2_usb_gimbal.py`。上位机限位与当前 Cat_C 一致，本次无需修改或烧录下位机。
+
+详细启动方式、固件超时行为与测试命令见 [云台 USB 控制协议与网页操作](docs/gimbal_usb_protocol.md)。

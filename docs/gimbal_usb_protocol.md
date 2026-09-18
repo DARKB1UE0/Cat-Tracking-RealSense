@@ -1,9 +1,69 @@
-# 云台 USB 控制协议
+# 云台 USB 控制协议与网页操作
 
-大疆 C 板以 USB CDC 虚拟串口连接上位机。串口波特率字段仅用于枚举兼容，实际 USB 链路无波特率限制。
+协议以同级 `Cat_C/application/usb_gimbal/usb_gimbal_protocol.h/.c` 为准；角度范围对应 `Cat_C/application/gimbal/gimbal_config.h`。
 
-帧格式（小端）：`AA 55 | version:u8 | type:u8 | seq:u8 | length:u16 | payload | crc16:u16`。CRC16 为 IBM/Modbus（初值 `FFFF`，多项式 `A001`），覆盖 `version` 到 payload。
+## 帧格式
 
-`0x01` 设定点 payload 为 `<ffBBH>`：yaw、pitch（度，float32）、enable/mode（u8）、flags（u8）、保留（u16）。`0x02` 使能，`0x03` 急停，`0x04` ping；`0x81` 为状态帧，payload `<ffBBHI>`：当前 yaw/pitch、enabled、fault、保留、指令超时毫秒。
+大疆 C 板以 USB CDC 虚拟串口连接上位机，串口配置为 115200。帧为小端：
 
-固件超过 100 ms 未收到设定帧会自动进入停止状态。Python 双端接口见 `tools/gimbal_usb.py`。
+`AA 55 | version:u8 | type:u8 | seq:u8 | length:u16 | payload | crc16:u16`
+
+版本为 1；CRC16 为 IBM/Modbus，初值 `FFFF`、多项式 `A001`，覆盖 version 到 payload。USB 包边界不是帧边界，接收器支持分包、粘包、噪声和 CRC 错误恢复。
+
+| 类型 | 含义 | payload |
+| --- | --- | --- |
+| `0x01` | 双轴目标 | `<ffBBH>`：yaw、pitch（度），mode（0 停止，1 位置），flags=0，reserved=0 |
+| `0x02` | 使能已有有效目标 | 空；不能恢复已过期或 STOP 撤销的目标 |
+| `0x03` | 停止电机输出 | 空；锁存停止，需新目标恢复 |
+| `0x04` | 查询状态 | 空；不延长目标有效期 |
+| `0x81` | 实测状态 | `<ffBBHI>`：实测 yaw/pitch、enabled、fault、reserved、最后指令距今毫秒 |
+
+网页端 Yaw 滑条限制为 **−90°～+90°**，Pitch 滑条限制为 **−30°～+30°**，与当前下位机源码一致。零点为电机原点：GM6020 编码器 0 对应的最近整圈基准，DM4310P 反馈位置 0 rad。它不一定是车头方向，也不代表开机姿态；本次未修改零位偏移。
+
+本次仅修改网页端限位，没有修改或要求更新下位机固件。若以后要让 Pitch 支持更大范围，需另行修改、编译并烧录 Cat_C，同时确认机械行程。达妙协议 P/V/T 编解码量程、PID 和力矩限制保持不变。
+
+当前 Cat_C 固件在没有新目标超过 **100 ms** 时默认回零保持，**不是自动失能**。显式 STOP/mode=0 则跨超时保持停止。没有电机反馈或有电机故障时不输出。
+
+| fault 位 | 含义 |
+| --- | --- |
+| `0x01` | 上位机目标超时；诊断位，默认回零保持时可与 enabled=1 同时出现 |
+| `0x02` / `0x04` | yaw / pitch 电机反馈离线 |
+| `0x08` | 达妙电机故障 |
+| `0x10` | 目标角度越界 |
+| `0x20` | 电机零位基准未就绪 |
+
+## 网页启动与使用
+
+网页通过 Flask 后端直接连接 USB，无需启动 `ros2_usb_gimbal.py`。同一串口只能由一个进程控制；不要同时启动 ROS USB 桥接和网页 USB 控制。
+
+先确定 **C 板 USB CDC** 对应的设备，再设置环境变量。优先使用 `/dev/serial/by-id/` 中稳定的路径；不能仅凭 `/dev/ttyACM0` 编号判断设备用途。
+
+```bash
+ls -l /dev/serial/by-id/
+# 将下方路径替换成实际的 C 板设备
+export GIMBAL_USB_PORT=/dev/serial/by-id/usb-YueLuEmbedded_Vision_Comm_port_2070377C5948-if00
+python3 web_app.py
+# 如需同时启动底盘通信与 VNC，也可使用：bash launch_web_nav.sh
+```
+
+未设置环境变量时使用本机已验证的 `/dev/serial/by-id/usb-YueLuEmbedded_Vision_Comm_port_2070377C5948-if00`；若设备不存在，网页会显示未连接，其他网页功能仍可使用。后端每 2 秒重试打开串口，只有收到协议正确的实测状态后才允许控制。缺少串口模块时，在运行网页的 Python 环境安装 `pyserial`（已列入 requirements.txt）。
+
+1. 在“云台控制”卡片确认实测角度、连接和电机状态。
+2. 点击“启用云台控制”：先保持实测角度，避免启用时跳到滑条初始位置。
+3. 鼠标拖动 yaw/pitch 滑条，步长 0.5°，松开后保持目标。实测值单独显示，不把目标值冒充实际姿态。
+4. 点击“一键回零”：两轴目标同时设为 0°，持续保持；未启用控制时也可直接点击。按钮发送位置目标，不改写电机编码器零位，不承诺已经到位。
+5. 点击“停止云台”或关闭控制：发送 STOP，撤销目标，停止电机输出。停止不是机械锁止，也不是回零。
+
+后端每 20 ms 发送当前目标；网页每 100 ms 更新控制租约，拖动时也立即提交最新角度，避免依赖浏览器精确满足固件的 100 ms 超时。超过 600 ms 没有有效网页续期，或反馈超过 300 ms 不更新、收到阻断故障时，后端撤销控制并尝试发送 STOP。失焦、切换标签、退出页面、Escape 也触发停止；重新连接不会自动恢复旧目标。
+
+同一时刻只允许一个网页控制会话，停止后的延迟指令和乱序指令不会恢复运动。串口物理断开或服务被强制杀死时无法保证 STOP 送达，下位机仍按其当前固件的超时回零策略处理。
+
+## 验证
+
+```bash
+# 上位机协议、HTTP 接口和真实 Chrome 浏览器测试，全程模拟 USB
+python3 -m unittest discover -s tests -v
+
+```
+
+软件测试不包含实机旋转或机械行程验证。

@@ -1,0 +1,11 @@
+{
+  "mode": "gimbal",
+  "map_frame": "map",
+  "mount_xyz_m": null,
+  "mount_rpy_deg": null,
+  "pitch_xyz_m": null,
+  "camera_xyz_m": null,
+  "camera_rpy_deg": null,
+  "yaw_sign": null,
+  "pitch_sign": null
+}
