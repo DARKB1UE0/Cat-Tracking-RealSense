@@ -47,8 +47,11 @@ def mount_point(point, config, feedback):
     # Rotations use right-hand rule. Positive rotation about +Y tips forward down;
     # pitch_sign must reflect the actual encoder direction of the installation.
     yaw = rotation([0, 0, feedback['yaw'] * config['yaw_sign']])
-    pitch_deg = feedback['pitch'] * config['pitch_sign'] if config.get('follow_pitch', True) else 0
-    pitch = rotation([0, pitch_deg, 0])
+    secondary_deg = (feedback['pitch'] * config['pitch_sign']
+                     if config.get('follow_secondary', config.get('follow_pitch', True)) else 0)
+    # USB calls the second axis "pitch"; this robot physically has a roll axis.
+    pitch = rotation([secondary_deg, 0, 0] if config.get('second_axis') == 'roll'
+                     else [0, secondary_deg, 0])
     camera = rotation(config['camera_rpy_deg']) @ point + config['camera_xyz_m']
     relative = yaw @ (np.array(config['pitch_xyz_m']) + pitch @ camera)
     return rotation(config['mount_rpy_deg']) @ relative + config['mount_xyz_m']
@@ -64,6 +67,10 @@ def load_config(path):
     fields = [] if mode == 'tf' else ['camera_xyz_m', 'camera_rpy_deg']
     if mode == 'gimbal':
         fields += ['mount_xyz_m', 'mount_rpy_deg', 'pitch_xyz_m']
+        if config.get('second_axis', 'pitch') not in ('pitch', 'roll'):
+            raise ValueError('second_axis 必须为 pitch 或 roll')
+        if type(config.get('follow_secondary', True)) is not bool:
+            raise ValueError('follow_secondary 必须为布尔值')
         if type(config.get('follow_pitch', True)) is not bool:
             raise ValueError('follow_pitch 必须为布尔值')
         for key in ('yaw_sign', 'pitch_sign'):
@@ -104,6 +111,14 @@ class CatMarkers:
     def snapshot(self):
         with self.lock:
             return dict(self.state)
+
+    def follow_observation(self):
+        """Only a published, fresh map observation can drive navigation."""
+        with self.lock:
+            if not self.state.get('position') or not self.ready or not self.last_publish:
+                return None
+            return dict(position=list(self.state['position']), captured_at=self.last_publish,
+                        config=dict(self.config), frame=self.config['map_frame'])
 
     def capture(self, feedback):
         self.start()

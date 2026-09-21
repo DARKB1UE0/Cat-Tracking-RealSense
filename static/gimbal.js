@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggle.setAttribute('aria-pressed', String(Boolean(token)));
         status.classList.toggle('active', Boolean(token));
         status.textContent = message || (token ? '手动控制中 · 松开保持' :
-            occupied ? '其他页面正在控制' : connected ? '云台已连接 · 控制未启用' : '云台未连接');
+            occupied ? (state.owner === 'auto' ? '自动追踪瞄准中' : '其他页面正在控制') : connected ? '云台已连接 · 控制未启用' : '云台未连接');
         labels();
     }
 
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state && previous) state.active = false;
         render(message);
         if (previous || pending || explicit) {
-            sendStop(previous).catch(error => {
+            return sendStop(previous).catch(error => {
                 status.textContent = '停止未确认 · 请检查连接';
                 detail.textContent = error.message;
             });
@@ -135,8 +135,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('gimbal-' + axis + '-actual').textContent =
                     result.connected && Number.isFinite(value) ? value.toFixed(1) + '°' : '—';
             });
-            const faults = [ [2, 'Yaw 电机离线'], [4, 'Pitch 电机离线'],
-                [8, 'Pitch 电机故障'], [16, '目标超限'], [32, '零位未就绪'] ]
+            const faults = [ [2, 'Yaw 电机离线'], [4, 'Roll 电机离线'],
+                [8, 'Roll 电机故障'], [16, '目标超限'], [32, '零位未就绪'] ]
                 .filter(([bit]) => result.fault & bit).map(([, label]) => label);
             detail.textContent = !result.connected ? result.message : faults.length ? faults.join('；') :
                 (result.enabled ? '电机已使能' : '电机已停止') +
@@ -177,6 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     setInterval(sendTarget, 100);
     setInterval(poll, 250);
+    window.addEventListener('auto-follow-request', event => {
+        if (token || starting) event.detail.waits.push(disable());
+    });
     render('正在连接云台…');
     poll();
 });

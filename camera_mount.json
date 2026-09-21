@@ -8,5 +8,6 @@
   "camera_rpy_deg": [-90.0, 0.0, -90.0],
   "yaw_sign": 1,
   "pitch_sign": 1,
-  "follow_pitch": false
+  "second_axis": "roll",
+  "follow_secondary": true
 }

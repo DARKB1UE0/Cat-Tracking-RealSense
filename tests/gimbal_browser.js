@@ -98,7 +98,7 @@ window.addEventListener('load', async () => {
     await check('motor fault disables controls', async () => {
         feedback.fault = 4; feedback.controllable = false; await tick(250);
         assert(toggle.disabled && home.disabled, 'fault ignored');
-        assert(document.getElementById('gimbal-detail').textContent.includes('Pitch 电机离线'), 'fault text');
+        assert(document.getElementById('gimbal-detail').textContent.includes('Roll 电机离线'), 'fault text');
         feedback.fault = 0; feedback.controllable = true; await tick(250);
     });
     await check('target network failure ends local control', async () => {

@@ -1,5 +1,7 @@
 {
   "mode": "gimbal",
+  "second_axis": "roll",
+  "follow_secondary": true,
   "map_frame": "map",
   "mount_xyz_m": null,
   "mount_rpy_deg": null,

@@ -15,11 +15,16 @@ import pyrealsense2 as rs
 from gimbal_web import install_gimbal
 from cat_markers import CatMarkers, target_point
 import atexit
+from auto_follow import AutoFollow, create_follow_blueprint
+from follow_navigation import FollowNavigation
 
 app = Flask(__name__)
 gimbal_controller = install_gimbal(app)
 cat_markers = CatMarkers()
 atexit.register(cat_markers.close)
+auto_follow = AutoFollow(cat_markers, gimbal_controller, FollowNavigation())
+app.register_blueprint(create_follow_blueprint(auto_follow))
+atexit.register(auto_follow.close)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 最大16MB
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
@@ -70,6 +75,7 @@ def init_camera():
 def stop_camera():
     """停止RealSense相机"""
     global pipeline, camera_active
+    auto_follow.stop('相机已停止，自动追踪结束')
     cat_markers.clear('相机已停止')
     if pipeline:
         try:
@@ -235,6 +241,7 @@ def generate_frames():
 def run_tracker(image_path):
     """初始化追踪器（不运行run方法）"""
     global tracking_active, tracker_instance
+    auto_follow.stop('切换识别目标，自动追踪结束')
     cat_markers.clear('等待目标识别')
     cat_markers.start()
     gimbal_controller.start()
@@ -365,6 +372,7 @@ def stop_tracking():
     
     tracking_active = False
     tracker_instance = None
+    auto_follow.stop('识别已停止，自动追踪结束')
     cat_markers.clear('追踪已停止')
     
     return jsonify({
@@ -446,6 +454,7 @@ if __name__ == '__main__':
     try:
         app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
     finally:
+        auto_follow.close()
         cat_markers.close()
         gimbal_controller.close()
         print("\n正在关闭相机...")

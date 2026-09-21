@@ -12,7 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
         KeyJ: [0, 0, 1], KeyK: [0, 0, -1]
     };
     const pressed = new Set();
-    const topic = '/cmd_vel';
+    const topic = '/cmd_vel_manual';
+    let autoBlocked = false;
+    let starting = false, revision = 0;
     const bridgeUrl = new URL(window.location.href);
     bridgeUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     bridgeUrl.port = '9090';
@@ -30,11 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateControls(message) {
-        toggle.disabled = !connected();
+        toggle.disabled = !connected() || starting;
         stopButton.disabled = !connected();
         toggle.textContent = enabled ? '关闭键盘驾驶' : '启用键盘驾驶';
         toggle.setAttribute('aria-pressed', String(enabled));
-        status.textContent = message || (enabled ? '键盘驾驶已启用' : '通信已连接 · 驾驶未启用');
+        status.textContent = message || (starting ? '正在取消导航，等待键盘接管…' :
+            enabled ? '键盘驾驶已启用' : autoBlocked ? '导航控制中 · 点击启用键盘可接管' : '通信已连接 · 驾驶未启用');
         status.classList.toggle('active', enabled);
         keyHints.forEach(hint => {
             hint.classList.toggle('pressed', pressed.has(hint.dataset.driveKey));
@@ -67,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function disable(sendStop = true) {
         const wasEnabled = enabled;
+        revision++;
+        starting = false;
         enabled = false;
         clearKeys();
         if (sendStop && wasEnabled) publish();
@@ -129,11 +134,34 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
-    toggle.addEventListener('click', () => {
+    toggle.addEventListener('click', async () => {
         if (enabled) disable();
-        else if (connected()) {
-            enabled = true;
+        else if (connected() && !starting && !document.hidden && !leaving) {
+            starting = true;
+            const version = ++revision;
+            const handoff = {waits: []};
+            window.dispatchEvent(new CustomEvent('manual-control-request', {detail: handoff}));
             updateControls();
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), 8000);
+            try {
+                await Promise.all(handoff.waits);
+                if (version !== revision) return;
+                const response = await fetch('/api/teleop/enable', {method: 'POST', signal: abort.signal});
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '导航取消失败');
+                if (version !== revision || !connected() || document.hidden || leaving) return;
+                starting = false;
+                autoBlocked = false;
+                window.dispatchEvent(new Event('manual-control-ready'));
+                enabled = true;
+                updateControls();
+            } catch (error) {
+                if (version === revision) {
+                    disable();
+                    updateControls('键盘未接管 · ' + error.message);
+                }
+            } finally { clearTimeout(timer); }
         }
         // Keep subsequent Space presses from activating this button again.
         toggle.blur();
@@ -145,6 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('keydown', event => {
+        if (starting && (event.code === 'Space' || event.code === 'Escape')) {
+            event.preventDefault(); disable(); return;
+        }
         if (!enabled) return;
         if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing || isEditing(event.target)) {
             disable();
@@ -194,5 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(`${input.id}-value`).textContent = `${Number(input.value).toFixed(2)} ${unit}`;
         });
     });
+    window.addEventListener('auto-follow-state', event => {
+        autoBlocked = event.detail.active || event.detail.stopping;
+        if (autoBlocked && !starting) disable();
+        updateControls();
+    });
+    window.addEventListener('auto-follow-request', () => disable());
     connect();
 });

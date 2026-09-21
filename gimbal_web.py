@@ -33,6 +33,7 @@ class GimbalController:
         self.feedback = None
         self.feedback_at = None
         self.token = None
+        self.owner = None
         self.target = None
         self.deadline = 0
         self.sequence = -1
@@ -54,6 +55,7 @@ class GimbalController:
         with self.lock:
             ready = self._ready()
             return dict(connected=ready, active=self.token is not None,
+                        owner=self.owner,
                         controllable=bool(ready and not self.feedback[3] & ~1),
                         yaw=self.feedback[0] if ready else None,
                         pitch=self.feedback[1] if ready else None,
@@ -64,6 +66,7 @@ class GimbalController:
 
     def _drop(self, message):
         self.token = self.target = None
+        self.owner = None
         self.message = message
 
     def _disconnect(self, error):
@@ -86,7 +89,7 @@ class GimbalController:
                 self._disconnect(exc)
                 raise ControlError('停止指令未送达：USB 已断开', 503) from exc
 
-    def command(self, data):
+    def command(self, data, owner='manual'):
         if not isinstance(data, dict):
             raise ValueError('请求必须为 JSON 对象')
         action = data.get('action')
@@ -113,6 +116,7 @@ class GimbalController:
                 validate_target(*self.feedback[:2])
                 self.target = self.feedback[:2]
                 self.token = secrets.token_urlsafe(24)
+                self.owner = owner
                 self.sequence = -1
             else:
                 if self.token is None or data.get('token') != self.token:
@@ -128,7 +132,7 @@ class GimbalController:
                 self.target = (yaw, pitch)
                 self.sequence = seq
             self.deadline = self.clock() + self.LEASE
-            self.message = '手动控制中'
+            self.message = '自动追踪瞄准中' if self.owner == 'auto' else '手动控制中'
             return dict(token=self.token, yaw=self.target[0], pitch=self.target[1])
 
     def tick(self):

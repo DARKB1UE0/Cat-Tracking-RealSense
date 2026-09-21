@@ -55,7 +55,7 @@
                             <p>实际角度 <span id="gimbal-yaw-actual">—</span></p>
                         </div>
                         <div class="gimbal-axis">
-                            <label for="gimbal-pitch">俯仰 Pitch <output id="gimbal-pitch-value" for="gimbal-pitch">0.0°</output></label>
+                            <label for="gimbal-pitch">横滚 Roll <output id="gimbal-pitch-value" for="gimbal-pitch">0.0°</output></label>
                             <input id="gimbal-pitch" type="range" min="-30" max="30" step="0.5" value="0" disabled>
                             <div class="gimbal-scale"><span>−30°</span><span>0°</span><span>+30°</span></div>
                             <p>实际角度 <span id="gimbal-pitch-actual">—</span></p>
@@ -84,17 +84,17 @@
                     </div>
                     <div class="teleop-speeds">
                         <label for="teleop-linear">移动速度 <output id="teleop-linear-value" for="teleop-linear">0.20 m/s</output>
-                            <input id="teleop-linear" type="range" min="0.05" max="0.50" step="0.05" value="0.20">
+                            <input id="teleop-linear" type="range" min="0.05" max="1.00" step="0.05" value="0.20">
                         </label>
                         <label for="teleop-angular">转向速度 <output id="teleop-angular-value" for="teleop-angular">0.50 rad/s</output>
-                            <input id="teleop-angular" type="range" min="0.10" max="1.00" step="0.10" value="0.50">
+                            <input id="teleop-angular" type="range" min="0.10" max="2.00" step="0.10" value="0.50">
                         </label>
                     </div>
                     <div class="button-group">
                         <button id="teleop-toggle" class="btn btn-primary" type="button" aria-pressed="false" disabled>启用键盘驾驶</button>
                         <button id="teleop-stop" class="btn btn-danger" type="button" disabled>停止（空格）</button>
                     </div>
-                    <p class="teleop-hint">先取消 RViz 中的导航任务，再启用驾驶。按住移动，松开停止；支持组合键。切换窗口或点击 RViz 后需重新启用。</p>
+                    <p class="teleop-hint">启用键盘驾驶会自动取消当前导航和自动追踪，等待停车后接管。按住移动，松开停止；支持组合键。切换窗口或点击 RViz 后需重新启用。</p>
                 </section>
 
                 <!-- VNC 远程桌面（小块） -->
@@ -117,6 +117,12 @@
                 <div class="card">
                     <h2>🎯 追踪控制</h2>
                     <p id="cat-location-status" class="gimbal-hint" role="status">地图标注：等待目标识别</p>
+                    <div class="button-group" style="margin-top: 8px;">
+                        <button id="follow-start" class="btn btn-primary" type="button" disabled>自动追踪</button>
+                        <button id="follow-stop" class="btn btn-danger" type="button" disabled>停止自动追踪</button>
+                    </div>
+                    <p id="follow-status" class="gimbal-hint" role="status">正在连接自动追踪服务…</p>
+                    <p class="gimbal-hint">先识别目标猫，再启用自动追踪。车辆接近至约 1 米后保持距离，Yaw 持续朝向猫，Roll 保持水平。停止、切换窗口或目标丢失会取消导航。</p>
                     <div class="upload-area" id="upload-area">
                         <input type="file" id="file-input" accept="image/*" style="display: none;">
                         <div class="upload-placeholder" id="upload-placeholder">
@@ -151,6 +157,7 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script src="{{ url_for('static', filename='teleop.js') }}"></script>
     <script src="{{ url_for('static', filename='gimbal.js') }}"></script>
+    <script src="{{ url_for('static', filename='auto-follow.js') }}"></script>
 </body>
 
 </html>

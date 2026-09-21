@@ -37,6 +37,12 @@ class TeleopBrowserTest(unittest.TestCase):
     def test_gimbal_sliders(self):
         self.run_browser('gimbal', 12)
 
+    def test_auto_follow(self):
+        self.run_browser('auto-follow', 9)
+
+    def test_combined_control_handoff(self):
+        self.run_browser('handoff', 4)
+
     def run_browser(self, feature, minimum_checks):
         with tempfile.TemporaryDirectory(prefix='cat-teleop-test-') as directory:
             root = Path(directory)
@@ -50,8 +56,9 @@ class TeleopBrowserTest(unittest.TestCase):
             page = re.sub(r'src="http://[^\"]+:6080/[^\"]+"', 'src="about:blank"', page)
             page = page.replace('src="/video_feed"', '')
             page = page.replace('<script src="/static/script.js"></script>', '')
-            excluded = 'gimbal' if feature == 'teleop' else 'teleop'
-            page = page.replace(f'<script src="/static/{excluded}.js"></script>', '')
+            for excluded in ('gimbal', 'teleop', 'auto-follow'):
+                if excluded != feature and feature != 'handoff':
+                    page = page.replace(f'<script src="/static/{excluded}.js"></script>', '')
             harness = (ROOT / 'tests' / f'{feature}_browser.js').read_text()
             page = page.replace('</head>', '<script>' + harness + '</script></head>')
             (root / 'index.html').write_text(page)
