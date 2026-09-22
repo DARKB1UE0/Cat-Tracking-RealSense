@@ -1,0 +1,19 @@
+# User uploads stay local; keep the project's bundled example.
+/uploads/*
+!/uploads/example_cat.jpg
+
+# Python runtime and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local virtual environments, model caches and logs
+.venv/
+venv/
+/.cache/
+*.log
