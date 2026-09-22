@@ -253,3 +253,11 @@
 - 在工作空间及网页仓库分别增加忽略规则，覆盖 Python/测试缓存、虚拟环境、本地 .cache 与日志；工作空间额外忽略根目录 build/install/log。网页忽略 uploads 下运行时上传内容，明确保留项目自带 uploads/example_cat.jpg。
 - 对已跟踪的 __pycache__/track_specific_cat.cpython-310.pyc 使用 git rm --cached 取消跟踪，保留磁盘文件；所有用户照片保持原位。未屏蔽 Cat_C 等源码目录，未移除已有相机配置、示例图片或模型资源。
 - 验证使用 git check-ignore 核对实际上传文件、两仓库 Python 缓存及虚拟环境规则；确认示例照片仍被跟踪，字节码本地文件仍存在，git diff --check 通过。仅修改仓库管理规则，不重复运行功能测试。本次作为上次提交的补充，网页提交后同步更新工作空间 gitlink。
+
+### 20260922-10：同步 RealSense 远程 cat 分支
+
+- 用户要求同步 RealSense 仓库。fetch 后确认本地 cat 比 origin/cat 多 4 个提交、远程多 9 个提交；采用合并保留双方历史，不强制推送或丢弃任一侧提交。
+- 解决 .gitignore、tools/gimbal_usb.py 和协议说明的冲突：保留上传照片/缓存忽略规则、Yaw ±90°/第二轴 ±30°限幅、独占串口打开及不完整写入异常；合入远程的快速帧恢复、32 字节载荷校验、非阻塞状态批量读取与 ROS 桥接回归。
+- 保留远程独立 ROS 标注和几何转换工具；在协议说明中明确其 Pitch 俯仰模型不用于当前物理 Roll 云台，网页仍采用 cat_markers.py 和原有相机安装配置。人物阈值 0.15、持续追踪、0.50 m/s 平移上限及 640×480 相机设置保留。
+- 验证：合并后的 82 项完整网页/协议/浏览器/隔离 ROS 测试全部通过；无未解决冲突，git diff --cached --check 通过。未连接真实 USB 发控制指令，未修改 Cat_C 或重新启动运行服务。
+- 合并结果已在本地提交。普通推送 origin/cat 时失败：HTTPS 缺少用户名/凭据且当前终端无法交互读取；本机未安装 GitHub CLI，SSH 22 端口连接也被关闭。尚未推送成功，需在 VS Code 登录 GitHub 后再次同步。工作空间仅本地更新 RealSense gitlink，不推送 alpha 分支。

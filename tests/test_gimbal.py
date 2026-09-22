@@ -13,6 +13,10 @@ class Wire:
         self.tx = []
         self.closed = False
 
+    @property
+    def in_waiting(self):
+        return len(self.rx)
+
     def read(self, size):
         result = bytes(self.rx[:size])
         del self.rx[:size]
