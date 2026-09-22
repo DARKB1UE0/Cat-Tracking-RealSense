@@ -8,7 +8,9 @@ import os
 import threading
 import time
 from werkzeug.utils import secure_filename
-from track_specific_cat import CatTracker
+from target_tracking import ReferenceTracker
+from tracking_session import TrackingSession
+import uuid
 import cv2
 import numpy as np
 import pyrealsense2 as rs
@@ -25,6 +27,7 @@ atexit.register(cat_markers.close)
 auto_follow = AutoFollow(cat_markers, gimbal_controller, FollowNavigation())
 app.register_blueprint(create_follow_blueprint(auto_follow))
 atexit.register(auto_follow.close)
+tracking = TrackingSession(cat_markers, auto_follow, ReferenceTracker)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 最大16MB
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
@@ -32,10 +35,6 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 # 确保上传文件夹存在
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# 全局变量存储追踪器状态
-tracker_instance = None
-tracking_thread = None
-tracking_active = False
 
 # RealSense相机相关
 pipeline = None
@@ -88,7 +87,7 @@ def stop_camera():
 
 def generate_frames():
     """生成视频流帧"""
-    global pipeline, align, current_frame, current_depth_frame, tracking_active, tracker_instance, frame_lock
+    global pipeline, align, current_frame, current_depth_frame, frame_lock
     
     if not camera_active:
         if not init_camera():
@@ -108,7 +107,8 @@ def generate_frames():
                 continue
 
             # Snapshot the receive time and measured pose before slow inference.
-            capture = cat_markers.capture(gimbal_controller.snapshot()) if tracking_active else None
+            sample = tracking.capture(gimbal_controller.snapshot())
+            tracker, _, mode, capture = sample
             
             color_image = np.asanyarray(color_frame.get_data())
             depth_image = np.asanyarray(depth_frame.get_data())
@@ -121,62 +121,12 @@ def generate_frames():
             display_image = color_image.copy()
             
             # 如果正在追踪，进行检测和绘制
-            tracker = tracker_instance
-            if tracking_active and tracker and frame_count % 2 == 0:
+            if tracker and frame_count % 2 == 0:
                 try:
-                    results = tracker.yolo_model(color_image, verbose=False)
-                    cats = []
-                    
-                    if results[0].boxes is not None:
-                        for detection in results[0].boxes:
-                            class_id = int(detection.cls)
-                            confidence = float(detection.conf)
-                            
-                            if class_id == 15 and confidence > 0.5:
-                                x1, y1, x2, y2 = map(int, detection.xyxy[0])
-                                w = x2 - x1
-                                h = y2 - y1
-                                x = x1
-                                y = y1
-                                
-                                x = max(0, x)
-                                y = max(0, y)
-                                w = min(w, color_image.shape[1] - x)
-                                h = min(h, color_image.shape[0] - y)
-                                
-                                if w > 30 and h > 30:
-                                    cat_roi = color_image[y:y+h, x:x+w]
-                                    match_score = tracker.match_cat(cat_roi)
-                                    cats.append({
-                                        'box': (x, y, w, h),
-                                        'confidence': confidence,
-                                        'match_score': match_score
-                                    })
-                    
-                    # 找到最匹配的猫
-                    target_cat = None
-                    if cats:
-                        sorted_cats = sorted(cats, key=lambda c: c['match_score'], reverse=True)
-                        target_cat = sorted_cats[0]
-                        
-                        if target_cat['match_score'] < 0.75:
-                            target_cat = None
-                        elif len(cats) > 1:
-                            score_gap = target_cat['match_score'] - sorted_cats[1]['match_score']
-                            if score_gap < 0.05:
-                                target_cat = None
-                    
-                    # Only the reference-matched target receives a 3-D marker.
-                    # Stopping/replacing tracking invalidates in-flight inference.
-                    if tracking_active and tracker_instance is tracker:
-                        if target_cat:
-                            point = target_point(depth_frame, target_cat['box'], rs.rs2_deproject_pixel_to_point)
-                            if point is not None:
-                                cat_markers.observe(point, capture)
-                            else:
-                                cat_markers.clear('目标深度无效，暂不标注')
-                        else:
-                            cat_markers.clear()
+                    cats, target_cat = tracker.detect(color_image)
+                    point = (target_point(depth_frame, target_cat['box'], rs.rs2_deproject_pixel_to_point)
+                             if target_cat else None)
+                    tracking.observe(sample, point)
 
                     # 绘制结果
                     for cat in cats:
@@ -207,15 +157,23 @@ def generate_frames():
                             cv2.rectangle(display_image, (x, y), (x + w, y + h), color, thickness)
                             cv2.putText(display_image, f"Other ({match_score:.3f})", 
                                       (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                        if mode == 'person':
+                            gate = 'PASS' if cat['match_eligible'] else 'LOW'
+                            detail = (f"ReID: {cat['appearance_score']:.3f} "
+                                      f"Color: {cat['color_score']:.3f} {gate}")
+                            cv2.putText(display_image, detail,
+                                      (max(0, min(x, display_image.shape[1] - 380)),
+                                       min(y + 18, display_image.shape[0] - 5)),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
                     
                     # 显示追踪状态
-                    status_text = "TRACKING" if target_cat else "NO TARGET"
+                    status_text = ("PERSON TEST: " if mode == "person" else "CAT: ") + ("TRACKING" if target_cat else "NO TARGET")
                     status_color = (0, 255, 0) if target_cat else (0, 0, 255)
                     cv2.putText(display_image, status_text, (10, 30), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
                     
                 except Exception as e:
-                    cat_markers.clear('识别处理失败，已清除标注')
+                    tracking.observe(sample, None, '识别处理失败，已清除标注')
                     print(f"追踪处理错误: {e}")
             
             # 添加帧信息
@@ -238,158 +196,74 @@ def generate_frames():
             time.sleep(0.1)
 
 
-def run_tracker(image_path):
-    """初始化追踪器（不运行run方法）"""
-    global tracking_active, tracker_instance
-    auto_follow.stop('切换识别目标，自动追踪结束')
-    cat_markers.clear('等待目标识别')
-    cat_markers.start()
-    gimbal_controller.start()
-    try:
-        tracker_instance = CatTracker(image_path)
-        tracking_active = True
-        print("✓ 追踪器初始化成功")
-    except Exception as e:
-        print(f"✗ 追踪器初始化错误: {e}")
-        tracking_active = False
-
-
 @app.route('/')
 def index():
     """主页"""
     return render_template('index.html')
 
 
+@app.route('/tracking_mode', methods=['POST'])
+def set_tracking_mode():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(success=False, message='请求必须为 JSON 对象'), 400
+    try:
+        state = tracking.set_mode(data.get('mode'))
+        return jsonify(success=True, **state)
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)), 400
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """处理文件上传"""
-    global tracking_active, tracker_instance, tracking_thread
-    
-    # 检查是否已经在追踪
-    if tracking_active:
-        return jsonify({
-            'success': False,
-            'message': '追踪正在运行中，请先停止当前追踪'
-        }), 400
-    
-    # 检查是否有文件
-    if 'file' not in request.files:
-        return jsonify({
-            'success': False,
-            'message': '没有上传文件'
-        }), 400
-    
-    file = request.files['file']
-    
-    # 检查文件名
-    if file.filename == '':
-        return jsonify({
-            'success': False,
-            'message': '未选择文件'
-        }), 400
-    
-    # 验证并保存文件
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
+    file = request.files.get('file')
+    if not file or not allowed_file(file.filename):
+        return jsonify(success=False, message='请选择有效的参考照片'), 400
+    try:
+        mode = request.form.get('mode')
+        generation = int(request.form.get('generation', '-1'))
+        filename = uuid.uuid4().hex + '_' + (secure_filename(file.filename) or 'reference.jpg')
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
-        # 验证图像是否可读取
-        test_img = cv2.imread(filepath)
-        if test_img is None:
+        if cv2.imread(filepath) is None:
+            raise ValueError('无法读取图像文件，请选择有效图片')
+        tracking.register_reference(filepath, mode, generation)
+        return jsonify(success=True, message='参考照片已上传', filename=filename,
+                       filepath=filepath, mode=mode, generation=generation)
+    except ValueError as exc:
+        if 'filepath' in locals() and os.path.exists(filepath):
             os.remove(filepath)
-            return jsonify({
-                'success': False,
-                'message': '无法读取图像文件，请确保上传的是有效的图片'
-            }), 400
-        
-        return jsonify({
-            'success': True,
-            'message': '文件上传成功！',
-            'filename': filename,
-            'filepath': filepath
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': f'不支持的文件格式，请上传: {", ".join(ALLOWED_EXTENSIONS)}'
-        }), 400
+        return jsonify(success=False, message=str(exc)), 400
 
 
 @app.route('/start_tracking', methods=['POST'])
 def start_tracking():
-    """启动追踪"""
-    global tracking_active, tracker_instance
-    
-    if tracking_active:
-        return jsonify({
-            'success': False,
-            'message': '追踪已经在运行中'
-        }), 400
-    
-    data = request.get_json()
-    filepath = data.get('filepath')
-    
-    if not filepath or not os.path.exists(filepath):
-        return jsonify({
-            'success': False,
-            'message': '参考图片文件不存在'
-        }), 400
-    
-    # 初始化相机（如果还没有初始化）
-    if not camera_active:
-        if not init_camera():
-            return jsonify({
-                'success': False,
-                'message': '相机初始化失败，请检查RealSense相机是否连接'
-            }), 500
-    
-    # 初始化追踪器
-    run_tracker(filepath)
-    
-    if tracking_active:
-        return jsonify({
-            'success': True,
-            'message': '追踪已启动！请查看浏览器中的视频流。'
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': '追踪器初始化失败'
-        }), 500
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(success=False, message='请求必须为 JSON 对象'), 400
+    try:
+        if not camera_active and not init_camera():
+            return jsonify(success=False, message='相机初始化失败，请检查 RealSense 连接'), 503
+        cat_markers.start()
+        gimbal_controller.start()
+        tracking.start(data.get('filepath'), data.get('mode'), data.get('generation'))
+        return jsonify(success=True, message='识别已启动，请查看视频中的目标框')
+    except ValueError as exc:
+        return jsonify(success=False, message=str(exc)), 400
 
 
 @app.route('/stop_tracking', methods=['POST'])
 def stop_tracking():
-    """停止追踪"""
-    global tracking_active, tracker_instance
-    
-    if not tracking_active:
-        return jsonify({
-            'success': False,
-            'message': '当前没有运行中的追踪'
-        }), 400
-    
-    tracking_active = False
-    tracker_instance = None
-    auto_follow.stop('识别已停止，自动追踪结束')
-    cat_markers.clear('追踪已停止')
-    
-    return jsonify({
-        'success': True,
-        'message': '追踪已停止'
-    })
+    tracking.stop()
+    return jsonify(success=True, message='识别已停止')
 
 
 @app.route('/status', methods=['GET'])
 def get_status():
-    """获取追踪状态"""
-    return jsonify({
-        'tracking_active': tracking_active,
-        'has_tracker': tracker_instance is not None,
-        'camera_active': camera_active,
-        'cat_location': cat_markers.snapshot()
-    })
+    response = jsonify(**tracking.snapshot(), camera_active=camera_active,
+                       cat_location=cat_markers.snapshot())
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.route('/video_feed')
@@ -414,8 +288,8 @@ def start_camera():
 @app.route('/stop_camera', methods=['POST'])
 def stop_camera_route():
     """停止相机"""
-    global tracking_active
-    if tracking_active:
+    state = tracking.snapshot()
+    if state['tracking_active'] or state['tracking_loading']:
         return jsonify({'success': False, 'message': '请先停止追踪'}), 400
     
     stop_camera()

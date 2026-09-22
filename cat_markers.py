@@ -100,6 +100,7 @@ class CatMarkers:
         self.ready = False
         self.state = {'message': '等待目标识别', 'position': None}
         self.last_publish = 0
+        self.target_kind = 'cat'
         self.config_path = os.environ.get('CAT_CAMERA_CONFIG', str(Path(__file__).with_name('camera_mount.json')))
 
     def start(self):
@@ -111,6 +112,13 @@ class CatMarkers:
     def snapshot(self):
         with self.lock:
             return dict(self.state)
+
+    def set_target_kind(self, kind):
+        with self.lock:
+            if kind not in ('cat', 'person'):
+                raise ValueError('未知目标类型')
+            self.target_kind = kind
+            self.clear('识别模式已切换，等待新目标')
 
     def follow_observation(self):
         """Only a published, fresh map observation can drive navigation."""
@@ -191,7 +199,7 @@ class CatMarkers:
             marker.color.r, marker.color.g, marker.color.b, marker.color.a = 0.1, 1.0, 0.25, 1.0
             marker.scale.x = marker.scale.y = 0.2
             marker.scale.z = 0.2 if not identifier else 0.18
-            marker.text = f'Target cat ({located.point.x:.2f}, {located.point.y:.2f}) m' if identifier else ''
+            marker.text = f'Target {self.target_kind} ({located.point.x:.2f}, {located.point.y:.2f}) m' if identifier else ''
             marker.frame_locked = False
             ttl_ns = max(1, int((2.0 - age) * 1e9))
             marker.lifetime = Duration(sec=ttl_ns // 1_000_000_000,
@@ -199,7 +207,8 @@ class CatMarkers:
             markers.append(marker)
         self.publisher.publish(MarkerArray(markers=markers))
         self.last_publish = captured_at
-        self.state = {'message': '目标猫位置已标注', 'frame': self.config['map_frame'],
+        name = '测试目标人物' if self.target_kind == 'person' else '目标猫'
+        self.state = {'message': name + '位置已标注', 'frame': self.config['map_frame'],
                       'position': [located.point.x, located.point.y, located.point.z]}
 
     def _run(self):

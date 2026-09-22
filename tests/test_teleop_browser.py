@@ -43,6 +43,9 @@ class TeleopBrowserTest(unittest.TestCase):
     def test_combined_control_handoff(self):
         self.run_browser('handoff', 4)
 
+    def test_person_mode(self):
+        self.run_browser('person-mode', 6)
+
     def run_browser(self, feature, minimum_checks):
         with tempfile.TemporaryDirectory(prefix='cat-teleop-test-') as directory:
             root = Path(directory)
@@ -55,7 +58,8 @@ class TeleopBrowserTest(unittest.TestCase):
             # Prevent all camera, VNC and tracking requests during the test.
             page = re.sub(r'src="http://[^\"]+:6080/[^\"]+"', 'src="about:blank"', page)
             page = page.replace('src="/video_feed"', '')
-            page = page.replace('<script src="/static/script.js"></script>', '')
+            if feature != 'person-mode':
+                page = page.replace('<script src="/static/script.js"></script>', '')
             for excluded in ('gimbal', 'teleop', 'auto-follow'):
                 if excluded != feature and feature != 'handoff':
                     page = page.replace(f'<script src="/static/{excluded}.js"></script>', '')

@@ -10,7 +10,7 @@ from ultralytics import YOLO
 from scipy.spatial.distance import cosine
 
 class CatTracker:
-    def __init__(self, reference_image_path):
+    def __init__(self, reference_image_path, reference_selector=None):
         """
         初始化猫追踪器（YOLOv8 + ResNet方案）
         
@@ -55,8 +55,12 @@ class CatTracker:
         ])
         
         # 3. 从参考图片中提取目标猫的特征
-        print("正在从参考图片中提取目标猫的特征...")
+        print("正在从参考图片中提取目标特征...")
+        if reference_selector is not None:
+            self.reference_image = reference_selector(self.yolo_model, self.reference_image)
         self.reference_feature = self._extract_feature_from_image(self.reference_image)
+        if self.reference_feature is None:
+            raise ValueError('参考照片特征提取失败，请更换清晰照片')
         print(f"参考特征维度: {self.reference_feature.shape}")
         print("初始化完成！")
     

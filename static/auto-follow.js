@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         start.setAttribute('aria-pressed', String(Boolean(token)));
         label.textContent = message || state?.message || '自动追踪未启用';
         if (!message && state?.distance != null && state?.active) {
-            label.textContent += ` · 距猫 ${state.distance.toFixed(2)} 米`;
+            label.textContent += ` · 距目标 ${state.distance.toFixed(2)} 米`;
         }
         window.dispatchEvent(new CustomEvent('auto-follow-state', {
             detail: {active: Boolean(starting || token || state?.active), stopping: Boolean(state?.stopping)}

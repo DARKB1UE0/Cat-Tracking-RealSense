@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.repeat || pressed.has(event.code)) return;
         pressed.add(event.code);
         publishMotion();
-        if (enabled && publishTimer === null) publishTimer = setInterval(publishMotion, 100);
+        if (enabled && publishTimer === null) publishTimer = setInterval(publishMotion, 50);
         updateControls();
     });
     document.addEventListener('keyup', event => {

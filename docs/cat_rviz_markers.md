@@ -58,3 +58,7 @@ ros2 topic echo /cat/markers --once
 ```
 
 需要 ROS Humble 的 rclpy、tf2_ros、tf2_geometry_msgs、visualization_msgs；当前系统已具备。
+
+## 人物测试模式
+
+网页切换到人物测试模式后，标注目标改为参考衣着匹配的人，文字为 `Target person`；为保持 RViz 配置兼容，话题与 marker namespace 保持原值。位置仍由人体检测框中心的对齐深度估计，因此可能位于躯干或腿部，不是脚底。模式切换会清除标记并使旧图像结果失效；确认目标后可使用原有自动跟随按钮，停车距离仍按水平距离计算。

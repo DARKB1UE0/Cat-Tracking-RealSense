@@ -52,7 +52,7 @@ python3 web_app.py
 ✅ **浏览器内视频流** - 无需额外窗口  
 ✅ **实时追踪显示** - 直接在网页中查看  
 ✅ **距离测量** - 使用RealSense深度信息  
-✅ **相似度评分** - ResNet50特征匹配  
+✅ **相似度评分** - 猫使用 ResNet50，人物使用专用 ReID 模型<br>
 ✅ **多猫识别** - 同时检测多只猫  
 ✅ **响应式设计** - 支持不同屏幕尺寸  
 
@@ -87,8 +87,9 @@ python3 web_app.py
 - 实时状态轮询
 
 ### AI处理
-- YOLOv8n: 猫检测 (每2帧)
-- ResNet50: 特征提取
+- YOLOv8n: 当前模式的猫/人检测（每 2 帧）
+- ResNet50: 猫的特征提取
+- OmniScaleNet ReID（OpenVINO）: 人物特征提取，ReID 占 90%、颜色占 10%
 - 余弦相似度: 匹配算法
 
 ## 🔧 API端点
@@ -100,7 +101,8 @@ python3 web_app.py
 | `/upload` | POST | 上传照片 |
 | `/start_camera` | POST | 启动相机 |
 | `/stop_camera` | POST | 停止相机 |
-| `/start_tracking` | POST | 启动追踪 |
+| `/start_tracking` | POST | 用 filepath、mode、generation 启动识别 |
+| `/tracking_mode` | POST | 切换 cat / person 模式，同时停止旧识别与自动跟随 |
 | `/stop_tracking` | POST | 停止追踪 |
 | `/status` | GET | 获取状态 |
 
@@ -212,3 +214,5 @@ gunicorn -w 1 -b 0.0.0.0:5000 web_app:app
 ---
 
 **享受你的猫咪追踪体验！** 🐱✨
+
+人物测试模式的参考照片要求、切换和自动跟随步骤见 [README](README.md#人物测试模式衣着外观匹配)。上传表单须带 `/status` 返回的 mode、generation，模式切换后需要重新上传照片。

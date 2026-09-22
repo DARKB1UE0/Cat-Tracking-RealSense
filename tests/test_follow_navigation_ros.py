@@ -2,6 +2,7 @@
 import os
 import threading
 import time
+import xml.etree.ElementTree as ET
 import unittest
 from unittest.mock import patch
 
@@ -75,12 +76,18 @@ class NavigationRosTests(unittest.TestCase):
                 wait(lambda: velocities and velocities[-1].linear.x==0.)  # manual watchdog
                 time.sleep(.3)
                 nav.set_following(True)
-                wait(lambda: limits and limits[-1].speed_limit == .2)
+                wait(lambda: limits and limits[-1].speed_limit == .5)
                 time.sleep(.16)
                 self.assertTrue(nav.send_goal((2., 0., 0.)))
                 wait(lambda: nav.goal_handle is not None)
                 self.assertFalse(nav.snapshot()['foreign_busy'])
                 self.assertEqual(goals[-1].pose.header.frame_id, 'map')
+                tree = ET.parse(goals[-1].behavior_tree)
+                controller = tree.find('.//FollowPath')
+                self.assertEqual(controller.get('controller_id'), 'FollowTarget')
+                self.assertEqual(controller.get('goal_checker_id'), 'target_goal_checker')
+                for recovery in ('Spin', 'BackUp', 'ClearEntireCostmap'):
+                    self.assertIsNone(tree.find('.//' + recovery))
                 before = nonzero_count(); manual.publish(command); time.sleep(.1)
                 self.assertEqual(nonzero_count(), before)
                 self.assertFalse(nav.send_goal((3., 0., 0.)))
@@ -93,8 +100,11 @@ class NavigationRosTests(unittest.TestCase):
                 # Stop before a delayed goal response: accepted goal must still cancel.
                 delay_accept.clear(); request_received.clear()
                 nav.set_following(True); time.sleep(.16)
-                self.assertTrue(nav.send_goal((3., 0., 0.)))
+                self.assertTrue(nav.send_goal((3., 0., 0.), align=True))
                 wait(request_received.is_set)
+                align_tree = ET.parse(goals[-1].behavior_tree)
+                self.assertEqual(align_tree.find('.//FollowPath').get('controller_id'), 'AlignTarget')
+                self.assertEqual(align_tree.find('.//FollowPath').get('goal_checker_id'), 'general_goal_checker')
                 nav.set_following(False); nav.cancel()
                 self.assertTrue(nav.snapshot()['busy'])
                 delay_accept.set()

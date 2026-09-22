@@ -2,9 +2,21 @@
 import math
 import threading
 import time
+from pathlib import Path
+
+
+def follow_behavior_tree(align=False):
+    from ament_index_python.packages import get_package_share_directory
+    filename = 'align_target.xml' if align else 'follow_target.xml'
+    path = Path(get_package_share_directory('wheeltec_bringup')) / 'config' / filename
+    if not path.is_file():
+        raise RuntimeError('缺少目标跟随配置，请编译 wheeltec_bringup 并重启导航与网页')
+    return str(path)
 
 
 class FollowNavigation:
+    FOLLOW_SPEED_LIMIT = 0.50  # m/s; keep FollowTarget and AlignTarget baselines in sync
+
     def __init__(self):
         self.lock = threading.RLock()
         self.stop_event = threading.Event()
@@ -94,7 +106,7 @@ class FollowNavigation:
                                 for goal in response.goals_canceling)
                     if confirmed and not self._busy() and not self._foreign_busy():
                         quiet_since = quiet_since or time.monotonic()
-                        # velocity_smoother retains the last navigation input for 1 s.
+                        # Allow both the previous 1 s and current 0.25 s smoother timeout.
                         if time.monotonic() - quiet_since >= 1.1:
                             self.last_manual = None
                             return
@@ -119,7 +131,7 @@ class FollowNavigation:
             self.following = enabled
             self.active_at = time.monotonic()
             if self.initialized:
-                self._limit(.2 if enabled or self._busy() else 0)
+                self._limit(self.FOLLOW_SPEED_LIMIT if enabled or self._busy() else 0)
 
     def cancel(self):
         with self.lock:
@@ -151,7 +163,7 @@ class FollowNavigation:
             except Exception:
                 self.error = '导航取消请求失败，等待重试'
 
-    def send_goal(self, pose):
+    def send_goal(self, pose, align=False):
         with self.lock:
             if (not self.ready or not self.following or self._busy() or self.taking_over
                     or self._foreign_busy() or time.monotonic()-self.active_at < .15):
@@ -160,6 +172,7 @@ class FollowNavigation:
             from unique_identifier_msgs.msg import UUID
             import uuid
             goal = NavigateToPose.Goal()
+            goal.behavior_tree = follow_behavior_tree(align=align)
             goal.pose.header.frame_id = 'map'
             goal.pose.header.stamp = self.node.get_clock().now().to_msg()
             goal.pose.pose.position.x, goal.pose.pose.position.y = pose[:2]
@@ -261,9 +274,10 @@ class FollowNavigation:
             with self.lock:
                 self.node = node
                 self.client = ActionClient(node, NavigateToPose, '/navigate_to_pose')
-                self.velocity = node.create_publisher(Twist, '/cmd_vel', 10)
+                # Velocity is a latest-value stream, not a queue of old moves.
+                self.velocity = node.create_publisher(Twist, '/cmd_vel', 1)
                 self.speed_limit = node.create_publisher(SpeedLimit, '/speed_limit', 10)
-                node.create_subscription(Twist, '/cmd_vel_manual', self._manual, 10)
+                node.create_subscription(Twist, '/cmd_vel_manual', self._manual, 1)
                 qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
                 for action in ['/navigate_to_pose', '/navigate_through_poses', '/follow_waypoints']:
                     topic = action + '/_action/status'
@@ -292,7 +306,7 @@ class FollowNavigation:
                         self.error = '导航目标响应超时'
                         self.cancel_requested = True
                     if self.following or self._busy():
-                        self._limit(.2)
+                        self._limit(self.FOLLOW_SPEED_LIMIT)
                     if self.cancel_requested:
                         self._zero()
                         self._send_cancel()

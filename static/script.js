@@ -1,330 +1,179 @@
-// 全局变量
-let uploadedFilePath = null;
-let statusCheckInterval = null;
+// Reference upload, cat/person test mode and visual recognition lifecycle.
+let uploadedFilePath = null, selectedFile = null, statusCheckInterval = null;
+let recognition = null, revision = 0, switching = false, starting = false, uploading = false, polling = false;
+const byId = id => document.getElementById(id);
+const fileInput = byId('file-input'), uploadArea = byId('upload-area');
+const uploadPlaceholder = byId('upload-placeholder'), previewContainer = byId('preview-container');
+const previewImage = byId('preview-image'), uploadBtn = byId('upload-btn');
+const startBtn = byId('start-btn'), stopBtn = byId('stop-btn'), modeBtn = byId('test-mode-toggle');
+const videoOverlay = byId('video-overlay'), videoStream = byId('video-stream');
+const startCameraBtn = byId('start-camera-btn');
 
-// DOM元素
-const fileInput = document.getElementById('file-input');
-const uploadArea = document.getElementById('upload-area');
-const uploadPlaceholder = document.getElementById('upload-placeholder');
-const previewContainer = document.getElementById('preview-container');
-const previewImage = document.getElementById('preview-image');
-const removeImageBtn = document.getElementById('remove-image');
-const uploadBtn = document.getElementById('upload-btn');
-const startBtn = document.getElementById('start-btn');
-const stopBtn = document.getElementById('stop-btn');
-const statusDot = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
-const toast = document.getElementById('toast');
-const startCameraBtn = document.getElementById('start-camera-btn');
-const videoOverlay = document.getElementById('video-overlay');
-const videoStream = document.getElementById('video-stream');
+function renderRecognition() {
+    const person = recognition?.mode === 'person';
+    const busy = Boolean(starting || recognition?.tracking_loading || recognition?.tracking_active);
+    modeBtn.disabled = switching || !recognition;
+    modeBtn.textContent = switching ? '正在切换…' : person ? '退出测试模式（识别猫）' : '切换到人物测试模式';
+    modeBtn.setAttribute('aria-pressed', String(person));
+    byId('tracking-mode-status').textContent = '当前模式：' + (person ? '人物测试 · ReID 重识别' : '猫咪识别');
+    byId('reference-hint').textContent = person
+        ? '上传仅含一人的清晰照片，尽量完整显示当前衣着。连续确认后标注；衣着相似或遮挡时可能无法区分，请重新取景。'
+        : '上传目标猫的清晰照片。';
+    byId('upload-prompt').textContent = person ? '点击选择或拖拽目标人物照片' : '点击选择或拖拽猫照片';
+    uploadBtn.disabled = !recognition || switching || uploading || busy || !selectedFile;
+    startBtn.disabled = !recognition || switching || uploading || busy || !uploadedFilePath;
+    startBtn.textContent = starting || recognition?.tracking_loading ? '正在初始化…' : '🚀 启动追踪';
+    stopBtn.disabled = switching || !busy;
+    byId('status-dot').className = 'status-dot ' + (busy ? 'tracking' : 'ready');
+    byId('status-text').textContent = starting || recognition?.tracking_loading ? '模型初始化中'
+        : recognition?.tracking_active ? (person ? '人物识别中' : '猫咪识别中') : recognition?.tracking_error || '就绪';
+}
 
-// 页面加载完成
-document.addEventListener('DOMContentLoaded', () => {
-    initializeEventListeners();
-    startStatusPolling();
-});
+function resetUpload() {
+    selectedFile = null; uploadedFilePath = null;
+    fileInput.value = ''; previewImage.removeAttribute('src');
+    uploadPlaceholder.style.display = 'block'; previewContainer.style.display = 'none';
+    renderRecognition();
+}
 
-// 初始化事件监听器
-function initializeEventListeners() {
-    // 点击上传区域
-    uploadArea.addEventListener('click', () => {
-        if (!previewContainer.style.display || previewContainer.style.display === 'none') {
-            fileInput.click();
-        }
-    });
-
-    // 文件选择
-    fileInput.addEventListener('change', handleFileSelect);
-
-    // 拖拽上传
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.classList.add('dragover');
-    });
-
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.classList.remove('dragover');
-    });
-
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.classList.remove('dragover');
-        
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
-    });
-
-    // 移除图片
-    removeImageBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+function applyRecognition(state) {
+    if (recognition && (state.mode !== recognition.mode || state.generation !== recognition.generation)) {
+        revision++; starting = false; uploading = false;
         resetUpload();
-    });
-
-    // 上传按钮
-    uploadBtn.addEventListener('click', uploadFile);
-
-    // 启动追踪
-    startBtn.addEventListener('click', startTracking);
-
-    // 停止追踪
-    stopBtn.addEventListener('click', stopTracking);
-    
-    // 启动相机
-    startCameraBtn.addEventListener('click', startCamera);
-}
-
-// 处理文件选择
-function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        handleFile(file);
     }
+    recognition = state;
+    renderRecognition();
 }
 
-// 处理文件
+async function jsonRequest(url, options = {}) {
+    const response = await fetch(url, {cache: 'no-store', ...options});
+    const data = await response.json();
+    if (!response.ok || data.success === false) throw new Error(data.message || '请求失败');
+    return data;
+}
+
 function handleFile(file) {
-    // 验证文件类型
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp'];
-    if (!validTypes.includes(file.type)) {
-        showToast('请上传有效的图片文件！', 'error');
-        return;
+    if (switching || uploading || starting || recognition?.tracking_active || recognition?.tracking_loading) return;
+    if (!['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp'].includes(file.type)) {
+        showToast('请上传有效的图片文件', 'error'); return;
     }
-
-    // 验证文件大小（16MB）
-    if (file.size > 16 * 1024 * 1024) {
-        showToast('文件大小不能超过16MB！', 'error');
-        return;
-    }
-
-    // 显示预览
+    if (file.size > 16 * 1024 * 1024) { showToast('文件不能超过 16 MB', 'error'); return; }
+    selectedFile = file; uploadedFilePath = null;
+    const version = ++revision;
     const reader = new FileReader();
-    reader.onload = (e) => {
-        previewImage.src = e.target.result;
-        uploadPlaceholder.style.display = 'none';
-        previewContainer.style.display = 'block';
-        uploadBtn.disabled = false;
-        
-        // 重置上传状态
-        uploadedFilePath = null;
-        startBtn.disabled = true;
+    reader.onload = event => {
+        if (version !== revision) return;
+        previewImage.src = event.target.result;
+        uploadPlaceholder.style.display = 'none'; previewContainer.style.display = 'block';
+        renderRecognition();
     };
     reader.readAsDataURL(file);
+    renderRecognition();
 }
 
-// 重置上传
-function resetUpload() {
-    fileInput.value = '';
-    uploadPlaceholder.style.display = 'block';
-    previewContainer.style.display = 'none';
-    uploadBtn.disabled = true;
-    startBtn.disabled = true;
-    uploadedFilePath = null;
-}
-
-// 上传文件
 async function uploadFile() {
-    const file = fileInput.files[0];
-    if (!file) {
-        showToast('请先选择文件！', 'error');
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = '上传中...';
-
+    if (!recognition || !selectedFile || uploading || switching) return;
+    const version = ++revision;
+    const form = new FormData();
+    form.append('file', selectedFile); form.append('mode', recognition.mode);
+    form.append('generation', recognition.generation);
+    uploading = true; renderRecognition();
     try {
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            uploadedFilePath = data.filepath;
-            showToast(data.message, 'success');
-            startBtn.disabled = false;
-            uploadBtn.textContent = '重新上传';
-            uploadBtn.disabled = false;
-        } else {
-            showToast(data.message, 'error');
-            uploadBtn.textContent = '上传照片';
-            uploadBtn.disabled = false;
-        }
-    } catch (error) {
-        showToast('上传失败：' + error.message, 'error');
-        uploadBtn.textContent = '上传照片';
-        uploadBtn.disabled = false;
-    }
+        const result = await jsonRequest('/upload', {method: 'POST', body: form});
+        if (version !== revision) return;
+        uploadedFilePath = result.filepath;
+        showToast(result.message);
+    } catch (error) { if (version === revision) showToast(error.message, 'error'); }
+    finally { if (version === revision) { uploading = false; renderRecognition(); } }
 }
 
-// 启动追踪
 async function startTracking() {
-    if (!uploadedFilePath) {
-        showToast('请先上传参考照片！', 'error');
-        return;
-    }
-
-    startBtn.disabled = true;
-    startBtn.textContent = '正在启动...';
-
+    if (!uploadedFilePath || !recognition || switching || starting) return;
+    const version = ++revision;
+    starting = true; renderRecognition();
     try {
-        const response = await fetch('/start_tracking', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                filepath: uploadedFilePath
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showToast(data.message, 'success');
-            stopBtn.disabled = false;
-            updateStatus('tracking', '追踪中');
-        } else {
-            showToast(data.message, 'error');
-            startBtn.disabled = false;
-            startBtn.textContent = '🚀 启动追踪';
-        }
-    } catch (error) {
-        showToast('启动失败：' + error.message, 'error');
-        startBtn.disabled = false;
-        startBtn.textContent = '🚀 启动追踪';
-    }
+        const result = await jsonRequest('/start_tracking', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filepath: uploadedFilePath, mode: recognition.mode, generation: recognition.generation})});
+        if (version !== revision) return;
+        recognition.tracking_active = true; recognition.tracking_loading = false;
+        showToast(result.message);
+    } catch (error) { if (version === revision) showToast(error.message, 'error'); }
+    finally { if (version === revision) { starting = false; renderRecognition(); } }
 }
 
-// 停止追踪
 async function stopTracking() {
-    stopBtn.disabled = true;
-    stopBtn.textContent = '正在停止...';
-
+    const version = ++revision;
+    starting = false;
     try {
-        const response = await fetch('/stop_tracking', {
-            method: 'POST'
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showToast(data.message, 'success');
-            updateStatus('ready', '就绪');
-            startBtn.disabled = false;
-            startBtn.textContent = '🚀 启动追踪';
-            stopBtn.textContent = '⏹ 停止追踪';
-        } else {
-            showToast(data.message, 'error');
-            stopBtn.disabled = false;
-            stopBtn.textContent = '⏹ 停止追踪';
-        }
-    } catch (error) {
-        showToast('停止失败：' + error.message, 'error');
-        stopBtn.disabled = false;
-        stopBtn.textContent = '⏹ 停止追踪';
-    }
+        await jsonRequest('/stop_tracking', {method: 'POST'});
+        if (version !== revision) return;
+        recognition.tracking_active = false; recognition.tracking_loading = false;
+        showToast('识别与自动追踪已停止');
+    } catch (error) { if (version === revision) showToast(error.message, 'error'); }
+    finally { if (version === revision) renderRecognition(); }
 }
 
-// 启动相机
+async function switchMode() {
+    if (switching || !recognition) return;
+    const version = ++revision;
+    switching = true; starting = false; uploading = false; renderRecognition();
+    try {
+        const result = await jsonRequest('/tracking_mode', {method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({mode: recognition.mode === 'cat' ? 'person' : 'cat'})});
+        if (version !== revision) return;
+        recognition = result; resetUpload();
+        showToast('模式已切换，请上传对应目标的新参考照片');
+    } catch (error) { if (version === revision) showToast(error.message, 'error'); }
+    finally { switching = false; renderRecognition(); }
+}
+
+async function pollStatus() {
+    if (polling || switching) return;
+    polling = true;
+    const version = revision;
+    try {
+        const data = await jsonRequest('/status');
+        if (version !== revision) return;
+        applyRecognition(data);
+        const location = data.cat_location;
+        if (location) byId('cat-location-status').textContent = '地图标注：' + location.message
+            + (location.position ? ` · ${location.position.map(v => v.toFixed(2)).join(', ')} m` : '');
+        videoOverlay.classList.toggle('hidden', data.camera_active);
+        if (!data.camera_active) { startCameraBtn.disabled = false; startCameraBtn.textContent = '启动相机'; }
+    } catch (error) { console.error('状态检查失败:', error); }
+    finally { polling = false; }
+}
+
 async function startCamera() {
     startCameraBtn.disabled = true;
-    startCameraBtn.textContent = '启动中...';
-
     try {
-        const response = await fetch('/start_camera', {
-            method: 'POST'
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            showToast(data.message, 'success');
-            videoOverlay.classList.add('hidden');
-            // 刷新视频流
-            videoStream.src = '/video_feed?' + new Date().getTime();
-        } else {
-            showToast(data.message, 'error');
-            startCameraBtn.disabled = false;
-            startCameraBtn.textContent = '启动相机';
-        }
-    } catch (error) {
-        showToast('启动相机失败：' + error.message, 'error');
-        startCameraBtn.disabled = false;
-        startCameraBtn.textContent = '启动相机';
-    }
+        await jsonRequest('/start_camera', {method: 'POST'});
+        videoOverlay.classList.add('hidden'); videoStream.src = '/video_feed?' + Date.now();
+    } catch (error) { showToast(error.message, 'error'); startCameraBtn.disabled = false; }
 }
 
-// 轮询状态
-function startStatusPolling() {
-    statusCheckInterval = setInterval(async () => {
-        try {
-            const response = await fetch('/status');
-            const data = await response.json();
-
-            // 更新相机状态
-            const location = data.cat_location;
-            if (location) {
-                const coordinates = location.position
-                    ? ` · ${location.position.map(value => value.toFixed(2)).join(', ')} m`
-                    : '';
-                document.getElementById('cat-location-status').textContent =
-                    '地图标注：' + location.message + coordinates;
-            }
-
-            if (data.camera_active) {
-                videoOverlay.classList.add('hidden');
-            } else {
-                videoOverlay.classList.remove('hidden');
-                startCameraBtn.disabled = false;
-                startCameraBtn.textContent = '启动相机';
-            }
-
-            // 更新追踪状态
-            if (data.tracking_active) {
-                updateStatus('tracking', '追踪中');
-                stopBtn.disabled = false;
-                startBtn.disabled = true;
-            } else {
-                updateStatus('ready', '就绪');
-                stopBtn.disabled = true;
-                if (uploadedFilePath && data.camera_active) {
-                    startBtn.disabled = false;
-                    startBtn.textContent = '🚀 启动追踪';
-                }
-            }
-        } catch (error) {
-            console.error('状态检查失败:', error);
-        }
-    }, 2000); // 每2秒检查一次
-}
-
-// 更新状态显示
-function updateStatus(status, text) {
-    statusDot.className = 'status-dot ' + status;
-    statusText.textContent = text;
-}
-
-// 显示提示消息
 function showToast(message, type = 'success') {
-    toast.textContent = message;
-    toast.className = 'toast ' + type + ' show';
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 3000);
+    const toast = byId('toast'); toast.textContent = message; toast.className = 'toast ' + type + ' show';
+    setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// 页面卸载时停止轮询
-window.addEventListener('beforeunload', () => {
-    if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    uploadArea.addEventListener('click', () => { if (!selectedFile) fileInput.click(); });
+    fileInput.addEventListener('change', event => { if (event.target.files[0]) handleFile(event.target.files[0]); });
+    uploadArea.addEventListener('dragover', event => { event.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', event => {
+        event.preventDefault(); uploadArea.classList.remove('dragover');
+        if (event.dataTransfer.files[0]) handleFile(event.dataTransfer.files[0]);
+    });
+    byId('remove-image').addEventListener('click', event => {
+        event.stopPropagation(); revision++; uploading = false; resetUpload();
+    });
+    uploadBtn.addEventListener('click', uploadFile); startBtn.addEventListener('click', startTracking);
+    stopBtn.addEventListener('click', stopTracking); modeBtn.addEventListener('click', switchMode);
+    startCameraBtn.addEventListener('click', startCamera);
+    renderRecognition(); pollStatus(); statusCheckInterval = setInterval(pollStatus, 1000);
 });
+window.addEventListener('beforeunload', () => clearInterval(statusCheckInterval));

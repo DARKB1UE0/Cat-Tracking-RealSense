@@ -81,6 +81,15 @@ class MarkerRosTests(unittest.TestCase):
                 service.observe([0,0,2], service.capture(dict(connected=True, fault=1, yaw=90, pitch=0)))
                 wait_for(lambda: service.snapshot()['position'] is not None)
                 wait_for(lambda: service.snapshot()['message'] == '目标位置已过期', timeout=3)
+                old_capture = service.capture(dict(connected=True, fault=1, yaw=0, pitch=0))
+                service.set_target_kind('person')
+                service.observe([0, 0, 2], old_capture)
+                self.assertIsNone(service.pending)
+                received.clear()
+                service.observe([0, 0, 2], service.capture(dict(connected=True, fault=1, yaw=0, pitch=0)))
+                wait_for(lambda: any(m.action == Marker.ADD and m.text.startswith('Target person')
+                                     for a in received for m in a.markers))
+                self.assertIn('人物', service.snapshot()['message'])
             finally:
                 service.close(); executor.shutdown(); node.destroy_node(); context.shutdown()
 

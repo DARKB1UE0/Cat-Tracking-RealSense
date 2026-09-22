@@ -55,6 +55,21 @@ window.addEventListener('load', async () => {
         feedback.distance = 1.; await tick(300);
         assert(label.textContent.includes('1.00'), 'distance');
     });
+    await check('persistent target loss keeps lease and stop control until recovery', async () => {
+        const session = currentToken;
+        const before = commands.length;
+        feedback.waiting_for_target = true; feedback.distance = null;
+        feedback.message = '自动追踪保持启用，已请求暂停导航，持续等待目标';
+        for (let i = 0; i < 200; i++) { await tick(300); await tick(200); }
+        assert(active() && start.disabled && !stop.disabled, 'lost session while waiting');
+        assert(label.textContent.includes('持续等待目标'), 'missing waiting message');
+        assert(!label.textContent.includes('距目标'), 'stale distance shown');
+        assert(commands.slice(before).every(c => c.action === 'heartbeat'), 'restarted or stopped session');
+        assert(commands.at(-1).token === session, 'lease changed');
+        feedback.waiting_for_target = false; feedback.message = '自动追踪中';
+        feedback.distance = 2.; await tick(300);
+        assert(active() && currentToken === session && label.textContent.includes('2.00'), 'did not recover');
+    });
     await check('explicit stop cancels and ends renewals', async () => {
         await click(stop); const count=commands.length; await tick(200);
         assert(!active() && commands.length===count && !feedback.active, 'stopped');
@@ -83,9 +98,9 @@ window.addEventListener('load', async () => {
         assert(active() && feedback.active, 'old request stopped new session');
         await click(stop); await tick(300);
     });
-    await check('target loss reported by server releases controls', async () => {
-        await click(start); feedback.active=false; feedback.message='目标已丢失'; await tick(300);
-        assert(!active() && !states.at(-1).active && label.textContent==='目标已丢失', 'lost target');
+    await check('device fault reported by server releases controls', async () => {
+        await click(start); feedback.active=false; feedback.message='云台故障，追踪已停止'; await tick(300);
+        assert(!active() && !states.at(-1).active && label.textContent==='云台故障，追踪已停止', 'device fault');
     });
     await check('space stops even when a different page owns follow', async () => {
         feedback.active=true; await tick(300);
